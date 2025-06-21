@@ -12,7 +12,7 @@ def run_app():
     
     # Start the FastAPI server
     api_process = subprocess.Popen(
-        [sys.executable, "api.py"],
+        [sys.executable, "nl2sql-api.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
