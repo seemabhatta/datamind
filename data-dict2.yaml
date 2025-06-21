@@ -1,0 +1,683 @@
+action_taken:
+  type: integer
+  description: "Indicates the action taken on the loan"
+  validation rules: "Values should be among predefined codes, e.g., 1, 4"
+  category: identifier
+  business rules: "Must correspond to a valid action code"
+  source: "Original dataset"
+  relationships: null
+
+action_taken_name:
+  type: string
+  description: "Description of the action taken on the loan"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Matches action_taken codes"
+  source: "Original dataset"
+  relationships: null
+
+agency_code:
+  type: integer
+  description: "Agency code responsible for the data record"
+  validation rules: "Values typically between 7 and 9"
+  category: identifier
+  business rules: "Must match known agency codes"
+  source: "Original dataset"
+  relationships: null
+
+agency_abbr:
+  type: string
+  description: "Agency abbreviation"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to agency_code"
+  source: "Original dataset"
+  relationships: null
+
+agency_name:
+  type: string
+  description: "Full name of the agency"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to agency_code"
+  source: "Original dataset"
+  relationships: null
+
+applicant_ethnicity:
+  type: integer
+  description: "Code for applicant's ethnicity"
+  validation rules: "Values are among 2, 3"
+  category: categorical
+  business rules: "Must match ethnicity_code list"
+  source: "Original dataset"
+  relationships: null
+
+applicant_ethnicity_name:
+  type: string
+  description: "Ethnicity description of applicant"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to applicant_ethnicity"
+  source: "Original dataset"
+  relationships: null
+
+applicant_income_000s:
+  type: float
+  description: "Applicant's income in thousands of dollars"
+  validation rules: "Non-negative float"
+  category: continuous
+  business rules: "Income should be within realistic bounds"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_1:
+  type: integer
+  description: "Code for applicant's primary race"
+  validation rules: "Values include 3, 5, etc."
+  category: categorical
+  business rules: "Must match race codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_2:
+  type: float
+  description: "Code for applicant's second race (if any)"
+  validation rules: "Optional, typically float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_3:
+  type: float
+  description: "Code for applicant's third race (if any)"
+  validation rules: "Optional, typically float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_4:
+  type: float
+  description: "Code for applicant's fourth race (if any)"
+  validation rules: "Optional, typically float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_5:
+  type: float
+  description: "Code for applicant's fifth race (if any)"
+  validation rules: "Optional, typically float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_name_1:
+  type: string
+  description: "Description of applicant's primary race"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should match applicant_race_1"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_name_2:
+  type: string
+  description: "Description for applicant's second race"
+  validation rules: "Optional, non-empty if provided"
+  category: categorical
+  business rules: "May be missing or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_name_3:
+  type: float
+  description: "Description for third race (if any)"
+  validation rules: "Optional or missing"
+  category: categorical
+  business rules: "May be empty or match race description"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_name_4:
+  type: float
+  description: "Description for fourth race (if any)"
+  validation rules: "Optional or missing"
+  category: categorical
+  business rules: "May be empty or match race description"
+  source: "Original dataset"
+  relationships: null
+
+applicant_race_name_5:
+  type: float
+  description: "Description for fifth race (if any)"
+  validation rules: "Optional or missing"
+  category: categorical
+  business rules: "May be empty or match race description"
+  source: "Original dataset"
+  relationships: null
+
+applicant_sex:
+  type: integer
+  description: "Code for applicant's sex"
+  validation rules: "Values include 1 for Male, 2 for Female"
+  category: categorical
+  business rules: "Must match sex codes"
+  source: "Original dataset"
+  relationships: null
+
+applicant_sex_name:
+  type: string
+  description: "Applicant's sex description"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to applicant_sex"
+  source: "Original dataset"
+  relationships: null
+
+application_date_indicator:
+  type: integer
+  description: "Indicator for the application date presence or status"
+  validation rules: "Values include 0, 2"
+  category: categorical
+  business rules: "Represents specific date status"
+  source: "Original dataset"
+  relationships: null
+
+as_of_year:
+  type: integer
+  description: "Year of the data record"
+  validation rules: "Typically 2015"
+  category: temporal
+  business rules: "Must match data year"
+  source: "Original dataset"
+  relationships: null
+
+census_tract_number:
+  type: float
+  description: "Census tract number"
+  validation rules: "Positive float values"
+  category: geographic
+  business rules: "Unique identifier for geographic area"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_ethnicity:
+  type: integer
+  description: "Code for co-applicant's ethnicity"
+  validation rules: "Values include 2, 5"
+  category: categorical
+  business rules: "Must match ethnicity codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_ethnicity_name:
+  type: string
+  description: "Description of co-applicant's ethnicity"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to co_applicant_ethnicity"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_1:
+  type: integer
+  description: "Code for co-applicant's primary race"
+  validation rules: "Values include 5, 8"
+  category: categorical
+  business rules: "Must match race codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_2:
+  type: float
+  description: "Code for co-applicant's second race (if any)"
+  validation rules: "Optional, float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_3:
+  type: float
+  description: "Code for co-applicant's third race (if any)"
+  validation rules: "Optional, float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_4:
+  type: float
+  description: "Code for co-applicant's fourth race (if any)"
+  validation rules: "Optional, float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_5:
+  type: float
+  description: "Code for co-applicant's fifth race (if any)"
+  validation rules: "Optional, float or missing"
+  category: categorical
+  business rules: "May be empty or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_name_1:
+  type: string
+  description: "Description of co-applicant's primary race"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should match co_applicant_race_1"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_name_2:
+  type: string
+  description: "Description of co-applicant's second race"
+  validation rules: "Optional, non-empty string"
+  category: categorical
+  business rules: "May be missing or match race codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_name_3:
+  type: float
+  description: "Description for co-applicant's third race (if any)"
+  validation rules: "Optional or missing"
+  category: categorical
+  business rules: "May be empty or match race description"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_name_4:
+  type: float
+  description: "Description for co-applicant's fourth race (if any)"
+  validation rules: "Optional or missing"
+  category: categorical
+  business rules: "May be empty or match race description"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_race_name_5:
+  type: float
+  description: "Description for co-applicant's fifth race (if any)"
+  validation rules: "Optional or missing"
+  category: categorical
+  business rules: "May be empty or match race description"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_sex:
+  type: integer
+  description: "Code for co-applicant's sex"
+  validation rules: "Values include 2 for Female, 5 for No co-applicant"
+  category: categorical
+  business rules: "Must match sex codes"
+  source: "Original dataset"
+  relationships: null
+
+co_applicant_sex_name:
+  type: string
+  description: "Co-applicant's sex description"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to co_applicant_sex"
+  source: "Original dataset"
+  relationships: null
+
+county_code:
+  type: integer
+  description: "Code for the county"
+  validation rules: "Values include 59, 61"
+  category: geographic
+  business rules: "Must match county codes"
+  source: "Original dataset"
+  relationships: null
+
+county_name:
+  type: string
+  description: "Name of the county"
+  validation rules: "Non-empty string"
+  category: geographic
+  business rules: "Corresponds to county_code"
+  source: "Original dataset"
+  relationships: null
+
+denial_reason_1:
+  type: float
+  description: "Denial reason code 1 if applicable"
+  validation rules: "Optional, float"
+  category: categorical
+  business rules: "May be missing if no denial reason"
+  source: "Original dataset"
+  relationships: null
+
+denial_reason_2:
+  type: float
+  description: "Denial reason code 2 if applicable"
+  validation rules: "Optional, float"
+  category: categorical
+  business rules: "May be missing if no denial reason"
+  source: "Original dataset"
+  relationships: null
+
+denial_reason_3:
+  type: float
+  description: "Denial reason code 3 if applicable"
+  validation rules: "Optional, float"
+  category: categorical
+  business rules: "May be missing if no denial reason"
+  source: "Original dataset"
+  relationships: null
+
+denial_reason_name_1:
+  type: float
+  description: "Name or description of denial reason 1"
+  validation rules: "Optional, float"
+  category: categorical
+  business rules: "May be missing if no denial reason"
+  source: "Original dataset"
+  relationships: null
+
+denial_reason_name_2:
+  type: float
+  description: "Description of denial reason 2"
+  validation rules: "Optional, float"
+  category: categorical
+  business rules: "May be missing if no denial reason"
+  source: "Original dataset"
+  relationships: null
+
+denial_reason_name_3:
+  type: float
+  description: "Description of denial reason 3"
+  validation rules: "Optional, float"
+  category: categorical
+  business rules: "May be missing if no denial reason"
+  source: "Original dataset"
+  relationships: null
+
+edit_status:
+  type: float
+  description: "Status of data quality edit"
+  validation rules: "Typically 6.0"
+  category: categorical
+  business rules: "Indicates type of quality edit failure"
+  source: "Original dataset"
+  relationships: null
+
+edit_status_name:
+  type: string
+  description: "Description of edit status"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to edit_status"
+  source: "Original dataset"
+  relationships: null
+
+hoepa_status:
+  type: integer
+  description: "HOEPA loan status indicator"
+  validation rules: "Values include 2"
+  category: categorical
+  business rules: "Indicates whether loan is HOEPA"
+  source: "Original dataset"
+  relationships: null
+
+hoepa_status_name:
+  type: string
+  description: "Description of HOEPA status"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to hoepa_status"
+  source: "Original dataset"
+  relationships: null
+
+lien_status:
+  type: integer
+  description: "Lien status code"
+  validation rules: "Values include 1, 2"
+  category: categorical
+  business rules: "Indicates lien priority"
+  source: "Original dataset"
+  relationships: null
+
+lien_status_name:
+  type: string
+  description: "Description of lien status"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to lien_status"
+  source: "Original dataset"
+  relationships: null
+
+loan_purpose:
+  type: integer
+  description: "Purpose of the loan"
+  validation rules: "Values include 1, 3"
+  category: categorical
+  business rules: "Indicates whether loan is for home purchase or refinancing"
+  source: "Original dataset"
+  relationships: null
+
+loan_type:
+  type: integer
+  description: "Type of loan"
+  validation rules: "Values include 1, 4"
+  category: categorical
+  business rules: "Indicates conventional or guaranteed"
+  source: "Original dataset"
+  relationships: null
+
+msamd:
+  type: float
+  description: "Metropolitan statistical area/micropolitan statistical area code"
+  validation rules: "Positive float"
+  category: geographic
+  business rules: "Unique regional identifier"
+  source: "Original dataset"
+  relationships: null
+
+msamd_name:
+  type: string
+  description: "Name of the area based on msamd"
+  validation rules: "Non-empty string"
+  category: geographic
+  business rules: "Corresponds to msamd"
+  source: "Original dataset"
+  relationships: null
+
+owner_occupancy:
+  type: integer
+  description: "Occupancy status of the property"
+  validation rules: "Values include 1 for owner-occupied, 2 otherwise"
+  category: categorical
+  business rules: "Indicates if property is owner-occupied"
+  source: "Original dataset"
+  relationships: null
+
+owner_occupancy_name:
+  type: string
+  description: "Description of occupancy status"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should match owner_occupancy"
+  source: "Original dataset"
+  relationships: null
+
+preapproval:
+  type: integer
+  description: "Preapproval request indicator"
+  validation rules: "Values include 2, 3"
+  category: categorical
+  business rules: "Indicates whether preapproval was requested"
+  source: "Original dataset"
+  relationships: null
+
+preapproval_name:
+  type: string
+  description: "Preapproval request description"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should correspond to preapproval"
+  source: "Original dataset"
+  relationships: null
+
+property_type:
+  type: integer
+  description: "Type of property"
+  validation rules: "Values include 1, 2"
+  category: categorical
+  business rules: "Indicates property classification"
+  source: "Original dataset"
+  relationships: null
+
+property_type_name:
+  type: string
+  description: "Description of property type"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should match property_type"
+  source: "Original dataset"
+  relationships: null
+
+purchaser_type:
+  type: integer
+  description: "Type of purchaser"
+  validation rules: "Values include 0, 6"
+  category: categorical
+  business rules: "Indicates who purchased the loan"
+  source: "Original dataset"
+  relationships: null
+
+purchaser_type_name:
+  type: string
+  description: "Description of purchaser type"
+  validation rules: "Non-empty string"
+  category: categorical
+  business rules: "Should match purchaser_type"
+  source: "Original dataset"
+  relationships: null
+
+respondent_id:
+  type: string
+  description: "Unique respondent identifier"
+  validation rules: "Non-empty string"
+  category: identifier
+  business rules: "Uniquely identifies the respondent"
+  source: "Original dataset"
+  relationships: null
+
+sequence_number:
+  type: integer
+  description: "Sequence number of record"
+  validation rules: "Positive integer"
+  category: identifier
+  business rules: "Sequential unique identifier per respondent"
+  source: "Original dataset"
+  relationships: null
+
+state_code:
+  type: integer
+  description: "State code"
+  validation rules: "Values include 36"
+  category: geographic
+  business rules: "State identifier"
+  source: "Original dataset"
+  relationships: null
+
+state_abbr:
+  type: string
+  description: "State abbreviation"
+  validation rules: "Non-empty string"
+  category: geographic
+  business rules: "Corresponds to state_code"
+  source: "Original dataset"
+  relationships: null
+
+state_name:
+  type: string
+  description: "Full name of the state"
+  validation rules: "Non-empty string"
+  category: geographic
+  business rules: "Match with state_code"
+  source: "Original dataset"
+  relationships: null
+
+hud_median_family_income:
+  type: integer
+  description: "Median family income in HUD data area"
+  validation rules: "Non-negative integer"
+  category: continuous
+  business rules: "Represents regional median income"
+  source: "Original dataset"
+  relationships: null
+
+loan_amount_000s:
+  type: integer
+  description: "Loan amount in thousands of dollars"
+  validation rules: "Positive integer"
+  category: continuous
+  business rules: "Transaction size"
+  source: "Original dataset"
+  relationships: null
+
+number_of_1_to_4_family_units:
+  type: float
+  description: "Number of family units in property"
+  validation rules: "Non-negative float"
+  category: continuous
+  business rules: "Describes property size"
+  source: "Original dataset"
+  relationships: null
+
+number_of_owner_occupied_units:
+  type: integer
+  description: "Number of owner-occupied units"
+  validation rules: "Non-negative integer"
+  category: continuous
+  business rules: "Property size indicator"
+  source: "Original dataset"
+  relationships: null
+
+minority_population:
+  type: float
+  description: "Percentage of minority population in area"
+  validation rules: "Value between 0 and 100"
+  category: continuous
+  business rules: "Demographic indicator"
+  source: "Original dataset"
+  relationships: null
+
+population:
+  type: integer
+  description: "Total population in the area"
+  validation rules: "Positive integer"
+  category: continuous
+  business rules: "Demographic indicator"
+  source: "Original dataset"
+  relationships: null
+
+rate_spread:
+  type: float
+  description: "Interest rate spread"
+  validation rules: "Float or missing"
+  category: continuous
+  business rules: "Interest rate comparison"
+  source: "Original dataset"
+  relationships: null
+
+tract_to_msamd_income:
+  type: float
+  description: "Ratio of tract income to area median income"
+  validation rules: "Positive float"
+  category: continuous
+  business rules: "Economic indicator"
+  source: "Original dataset"
+  relationships: null
