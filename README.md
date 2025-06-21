@@ -94,6 +94,56 @@ You can customize the application by:
 2. Updating the data dictionary to match your database schema
 3. Adjusting the configuration in `config.py`
 
+## Debugging
+
+### Setting up VS Code for Debugging
+
+1. Create a `.vscode` directory in the project root if it doesn't exist already
+2. Create a `launch.json` file inside the `.vscode` directory with the following content:
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Streamlit: nl2sqlchatv4.py",
+            "type": "python",
+            "request": "launch",
+            "module": "streamlit",
+            "args": [
+                "run",
+                "nl2sqlchatv4.py"
+            ],
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}
+```
+
+### Debugging Steps
+
+1. Set breakpoints in your code by clicking in the gutter next to the line numbers
+2. Select the "Run and Debug" view from the VS Code sidebar (or press Ctrl+Shift+D)
+3. Choose "Streamlit: nl2sqlchatv4.py" from the dropdown menu at the top
+4. Click the green play button or press F5 to start debugging
+5. The Streamlit app will launch in your default browser
+6. When execution reaches a breakpoint, VS Code will pause and allow you to:
+   - Inspect variables in the Variables panel
+   - Step through code using the debug controls
+   - View the call stack
+   - Evaluate expressions in the Debug Console
+
+7. Use the following keyboard shortcuts during debugging:
+   - F5: Continue execution
+   - F10: Step over
+   - F11: Step into
+   - Shift+F11: Step out
+   - Ctrl+Shift+F5: Restart
+   - Shift+F5: Stop debugging
+
 ## License
 
 [Specify your license here]
