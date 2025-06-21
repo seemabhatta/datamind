@@ -146,7 +146,8 @@ def main():
             except Exception as exp:
                 st.error(f"An error occurred: {exp}")
         # Clear the input
-        st.session_state.user_query = ""
+        #st.session_state.user_query = ""
+        #st.session_state["user_query"] = ""
 
 if __name__ == "__main__":
     main()
