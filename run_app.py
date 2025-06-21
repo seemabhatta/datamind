@@ -24,7 +24,7 @@ def run_app():
     
     # Start the Streamlit app
     streamlit_process = subprocess.Popen(
-        [sys.executable, "-m", "streamlit", "run", "nl2sqlchatv4.py"],
+        [sys.executable, "-m", "streamlit", "run", "nl2sql-ui.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
