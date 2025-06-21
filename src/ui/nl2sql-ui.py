@@ -4,13 +4,16 @@ import sqlite3
 import os
 import requests
 import json
+import sys
 from dotenv import load_dotenv
 import pathlib
-import config
 import atexit
-import cache_utils
-import ui_components
-import file_utils
+
+# Add the project root to the path so we can import modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import config
+from utils import cache_utils, file_utils
+from src.ui import ui_components
 
 load_dotenv()
 

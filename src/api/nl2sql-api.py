@@ -3,13 +3,16 @@ from pathlib import Path
 import pandas
 import yaml
 import json
+import sys
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+# Add the project root to the path so we can import modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))  
 import config
-import llm_util
-import file_utils
+from utils import llm_util, file_utils
 
 app = FastAPI(title="NL2SQL API", description="API for NL2SQL Chat")
 
@@ -46,10 +49,12 @@ async def upload_file(file: UploadFile = File(...)):
             f.write(content)
         
         # Generate enhanced data dictionary
-        sample_data_filename = os.path.join(config.SAMPLE_DATA_DIR, config.SAMPLE_DATA_FILENAME)
+        sample_data_filename = config.SAMPLE_DATA_FILENAME
         llm_util.save_enhanced_data_dictionary_to_yaml_file(sample_data_filename)
         
-        generated_dict = BASE_DIR / config.DATA_DICT_FILENAME
+        # Look for data dictionary in project root
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        generated_dict = Path(project_root) / config.DATA_DICT_FILENAME
         if generated_dict.exists():
             # Load the generated dictionary to return in the response
             with open(generated_dict, "r", encoding="utf-8") as f:

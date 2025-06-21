@@ -2,12 +2,16 @@ import os
 import re
 import streamlit as st
 import pathlib
-import config
+import sys
 from openai import OpenAI
 from dotenv import load_dotenv
 import pandas
 import yaml
-import file_utils
+
+# Add the project root to the path so we can import modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
+import config
+from utils import file_utils
 
 load_dotenv()
 
@@ -29,7 +33,9 @@ def call_response_api(llm_model, system_prompt, user_prompt):
 
 def load_prompt_file(file_path):
     try:
-        prompt_path = BASE_DIR / config.SYSTEM_PROMPTS_DIR / file_path if not pathlib.Path(file_path).is_absolute() else pathlib.Path(file_path)
+        # Use project root for system prompts
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        prompt_path = os.path.join(project_root, config.SYSTEM_PROMPTS_DIR, file_path) if not pathlib.Path(file_path).is_absolute() else pathlib.Path(file_path)
         with open(prompt_path, 'r', encoding='utf-8') as file:
             content = file.read()
         return content
@@ -64,7 +70,7 @@ def classify_intent(user_input):
 def create_nl2sqlchat_pompt(enriched_data_dict):
     system_prompt_file_path = config.NL2SQL_SYSTEM_PROMPT_FILE
     system_prompt = load_prompt_file(system_prompt_file_path)
-    sample_data_path = BASE_DIR / config.SAMPLE_DATA_DIR / config.SAMPLE_DATA_FILENAME
+    sample_data_path = file_utils.get_sample_data_path()
     try:
         with open(sample_data_path, "r", encoding="utf-8") as f:
             sample_data = f.read()
@@ -107,8 +113,7 @@ def generate_enhanced_data_dictionary(sample_data_file):
     and calls the LLM to generate an enhanced data dictionary. Returns the LLM's response as a string.
     Uses a more efficient prompt by sending only column names, types, and 2 sample values per column.
     """
-    # Always read sample_data_file from the configured sample-data directory
-    #sample_data_path = os.path.join(os.path.dirname(__file__), config.SAMPLE_DATA_DIR, sample_data_file)
+    # Always read sample data from the configured path
     sample_data_path = file_utils.get_sample_data_path()
     print(f"Loading sample data from {sample_data_path}...")
     try:
@@ -179,7 +184,8 @@ def save_enhanced_data_dictionary_to_yaml_file(sample_data_file):
         print("Failed to generate YAML data dictionary.")
         return
 
-    output_path = os.path.join(os.path.dirname(__file__), config.DATA_DICT_FILENAME)
+    # Save to project root directory
+    output_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), config.DATA_DICT_FILENAME)
     try:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(yaml_text)

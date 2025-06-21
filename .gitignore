@@ -35,6 +35,15 @@ env/
 .idea/
 .vscode/
 *.swp
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# User data and generated files
+data/sample-data/user_sample_data.csv
+data-dict2.yaml
 *.swo
 
 # Streamlit

@@ -12,7 +12,7 @@ def run_app():
     
     # Start the FastAPI server
     api_process = subprocess.Popen(
-        [sys.executable, "nl2sql-api.py"],
+        [sys.executable, "src/api/nl2sql-api.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
@@ -24,7 +24,7 @@ def run_app():
     
     # Start the Streamlit app
     streamlit_process = subprocess.Popen(
-        [sys.executable, "-m", "streamlit", "run", "nl2sql-ui.py"],
+        [sys.executable, "-m", "streamlit", "run", "src/ui/nl2sql-ui.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
