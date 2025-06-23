@@ -64,7 +64,7 @@ The application uses a YAML-based data dictionary (`data-dict2.yaml`) to underst
 ## Running the Application
 
 ```bash
-streamlit run nl2sqlchatv4.py
+streamlit run nl2sql-app.py
 ```
 
 ## Usage
@@ -76,7 +76,7 @@ streamlit run nl2sqlchatv4.py
 
 ## Project Structure
 
-- `nl2sqlchatv4.py`: Main application file
+- `nl2sql-app.py`: Main application file
 - `config.py`: Configuration settings
 - `data-dict2.yaml`: Data dictionary for the database schema
 - `system-prompts/`: Directory containing system prompts for the LLM
@@ -106,13 +106,13 @@ You can customize the application by:
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Streamlit: nl2sqlchatv4.py",
+            "name": "Streamlit: nl2sql-app.py",
             "type": "python",
             "request": "launch",
             "module": "streamlit",
             "args": [
                 "run",
-                "nl2sqlchatv4.py"
+                "nl2sql-app.py"
             ],
             "justMyCode": true,
             "env": {
@@ -127,7 +127,7 @@ You can customize the application by:
 
 1. Set breakpoints in your code by clicking in the gutter next to the line numbers
 2. Select the "Run and Debug" view from the VS Code sidebar (or press Ctrl+Shift+D)
-3. Choose "Streamlit: nl2sqlchatv4.py" from the dropdown menu at the top
+3. Choose "Streamlit: nl2sql-app.py" from the dropdown menu at the top
 4. Click the green play button or press F5 to start debugging
 5. The Streamlit app will launch in your default browser
 6. When execution reaches a breakpoint, VS Code will pause and allow you to:
