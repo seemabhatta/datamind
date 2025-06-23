@@ -8,6 +8,7 @@ import sys
 from dotenv import load_dotenv
 import pathlib
 import atexit
+import re
 
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -51,6 +52,17 @@ def cleanup_files():
 
 # Register cleanup for normal Python process termination
 atexit.register(cleanup_files)
+
+def normalize_user_input(user_input):
+    """Normalize user input for consistent caching"""
+    if not user_input:
+        return ""
+    
+    normalized = user_input.lower()
+    normalized = re.sub(r'\s+', ' ', normalized.strip())
+    normalized = re.sub(r'[.!?/-_@#$%^&*()]+$', '', normalized)
+    
+    return normalized
 
 def main():
     st.set_page_config(page_title="NL2SQL Chat", layout="centered")   
@@ -116,7 +128,7 @@ def main():
         submitted = st.form_submit_button("Enter")
     if submitted and user_input.strip():
         # Normalize for cache check
-        normalized_input = user_input.lower().strip()
+        normalized_input = normalize_user_input(user_input)
         cached = cache_utils.get_cached_sql(normalized_input)
         
         if cached:
