@@ -184,8 +184,9 @@ def save_enhanced_data_dictionary_to_yaml_file(sample_data_file):
         print("Failed to generate YAML data dictionary.")
         return
 
-    # Save to project root directory
-    output_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), config.DATA_DICT_FILENAME)
+    # Save to data/data-dict2.yaml using file_utils
+    output_path = file_utils.get_data_dict_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure 'data/' exists
     try:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(yaml_text)

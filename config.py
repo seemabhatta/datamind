@@ -2,8 +2,8 @@
 
 DB_PATH = "c:/users/ujjal/SQLite DB/test_database.db"
 TABLE_NAME = "ny_hmda_2015"
-SAMPLE_DATA_FILENAME = "user_sample_data.csv"
-DATA_DICT_FILENAME = "data-dict2.yaml"
+SAMPLE_DATA_FILENAME = "data/user_sample_data.csv"
+DATA_DICT_FILENAME = "data/data-dict2.yaml"
 SYSTEM_PROMPTS_DIR = "system-prompts"
 NL2SQL_SYSTEM_PROMPT_FILE = "nl2sqlSystemPrompt.txt"
 SUMMARY_PROMPT_FILE = "summaryPrompt.txt"
