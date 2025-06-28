@@ -1,8 +1,12 @@
 import os
 from pathlib import Path
-import config
+import sys
 import yaml
-import cache_utils
+
+# Add the project root to the path so we can import modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
+import config
+from utils import cache_utils
 
 def get_sample_data_path():
     return Path(config.SAMPLE_DATA_DIR) / config.SAMPLE_DATA_FILENAME
