@@ -16,6 +16,18 @@ from utils import cache_utils
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
 
+def get_project_root():
+    """Return the absolute path to the project root directory."""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+def resolve_prompt_path(system_prompts_dir, prompt_filename):
+    """
+    Return the absolute path to a prompt file, robust to working directory.
+    """
+    project_root = get_project_root()
+    prompt_path = os.path.join(project_root, system_prompts_dir, prompt_filename)
+    return os.path.abspath(prompt_path)
+
 def prepare_data_paths(base_name: str = "hmda_sample_new", data_dir: str = "data") -> dict[str, Path]:
     """
     Given a base filename (without extension), ensure the /data/<base_name> directory exists,
@@ -99,8 +111,8 @@ def get_db_connection(base_name: str) -> Optional[sqlite3.Connection]:
     return sqlite3.connect(db_file_path)
 
 
-
-def cleanup_files(base_name=None):
+#temp hardcoding
+def cleanup_files(base_name="hmda_sample_new"):
     """
     Delete all files and folders related to the provided base_name from /data,
     and clear session cache. If base_name is None, do nothing.

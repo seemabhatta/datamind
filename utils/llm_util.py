@@ -5,7 +5,7 @@ import pathlib
 import sys
 from openai import OpenAI
 from dotenv import load_dotenv
-import pandas
+import pandas as pd
 import yaml
 
 # Add the project root to the path so we can import modules
@@ -34,11 +34,12 @@ def call_response_api(llm_model, system_prompt, user_prompt):
 def load_prompt_file(file_path):
     try:
         # Use project root for system prompts
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        prompt_path = os.path.join(project_root, config.SYSTEM_PROMPTS_DIR, file_path) if not pathlib.Path(file_path).is_absolute() else pathlib.Path(file_path)
+        #project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        prompt_path = file_utils.resolve_prompt_path(config.SYSTEM_PROMPTS_DIR, file_path)
         with open(prompt_path, 'r', encoding='utf-8') as file:
             content = file.read()
         return content
+
     except FileNotFoundError:
         return f"Error: File not found at {prompt_path}"
     except Exception as e:
@@ -116,7 +117,7 @@ def generate_enhanced_data_dictionary(sample_data_path):
     """
     print(f"Loading sample data from {sample_data_path}...")
     try:
-        df = pandas.read_csv(sample_data_path)
+        df = pd.read_csv(sample_data_path)
         print(f"Successfully loaded sample data from {sample_data_path} with {len(df)} rows and {len(df.columns)} columns")
     except Exception as e:
         print(f"Error loading sample data from CSV: {e}")
@@ -135,8 +136,7 @@ def generate_enhanced_data_dictionary(sample_data_path):
     )
 
     # Step 3: Load the system prompt from the txt file
-    system_prompt_path = os.path.join(
-        os.path.dirname(__file__),
+    system_prompt_path = file_utils.resolve_prompt_path(
         config.SYSTEM_PROMPTS_DIR,
         config.ENHANCED_DD_SYSTEM_PROMPT_FILE
     )
