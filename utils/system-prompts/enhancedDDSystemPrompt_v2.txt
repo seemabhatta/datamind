@@ -23,7 +23,7 @@ tables:
       columns: [List of primary key columns]
     time_dimensions: [List of time dimension fields with metadata, if applicable]
     measures: [List of measures with name, expr, description, synonyms, aggregation, data_type, etc., if applicable]
-    dimensions: [List of dimensions with name, expr, description, data_type, sample_values, etc.]
+    dimensions: [List of dimensions with name, expr, description, data_type, sample_values, category, business_rules, validation_rules, etc.]
 relationships:
   - name: [Relationship Name]
     left_table: [Left Table Name]
@@ -51,12 +51,42 @@ verified_queries:
   - source
   - sample_values (if available)
   - relationships (e.g., primary key, foreign key, etc.)
- category
- business_rules
- source
- sample_values (if available)
- relationships (e.g., primary key, foreign key, etc.)
 
+Example:
+```
+tables:
+  - name: customers
+    dimensions:
+      - name: customer_id
+        expr: customer_id
+        data_type: int
+        description: Unique customer identifier
+        validation_rules: [is_not_null]
+        category: Customer Information
+        business_rules: [is_unique]
+        source: customer_database
+        sample_values: [1, 2, 3]
+        relationships: [primary_key]
+      - name: order_id
+        expr: order_id
+        data_type: int
+        description: Unique order identifier
+        validation_rules: [is_not_null]
+        category: Order Information
+        business_rules: [is_unique]
+        source: order_database
+        sample_values: [101, 102, 103]
+        relationships: [foreign_key]
+relationships:
+  - name: customer_orders
+    left_table: customers
+    right_table: orders
+    relationship_columns:
+      - left_column: customer_id
+        right_column: customer_id
+    join_type: inner
+    relationship_type: many_to_one
+```
 Ensure consistent indentation and formatting throughout the YAML output.
 Include all tables and columns from the provided dataset in the data dictionary.
 Do not include any explanation or non-YAML content in the output.
