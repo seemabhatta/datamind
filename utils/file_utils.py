@@ -16,7 +16,7 @@ from utils import cache_utils
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
 
-def prepare_data_paths(base_name: str, data_dir: str = "data") -> dict[str, Path]:
+def prepare_data_paths(base_name: str = "hmda_sample_new", data_dir: str = "data") -> dict[str, Path]:
     """
     Given a base filename (without extension), ensure the /data/<base_name> directory exists,
     and return a dict with Path objects for .csv, .db, and .yaml files.

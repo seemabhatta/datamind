@@ -70,7 +70,8 @@ def classify_intent(user_input):
 def create_nl2sqlchat_pompt(enriched_data_dict):
     system_prompt_file_path = config.NL2SQL_SYSTEM_PROMPT_FILE
     system_prompt = load_prompt_file(system_prompt_file_path)
-    sample_data_path = file_utils.get_sample_data_path()
+    paths = file_utils.prepare_data_paths()
+    sample_data_path = paths["data_file"]
     try:
         with open(sample_data_path, "r", encoding="utf-8") as f:
             sample_data = f.read()
