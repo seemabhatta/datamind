@@ -67,10 +67,10 @@ def classify_intent(user_input):
         return match.group(1)
     return intent_raw
 
-def create_nl2sqlchat_pompt(enriched_data_dict):
+def create_nl2sqlchat_pompt(enriched_data_dict, table_name):
     system_prompt_file_path = config.NL2SQL_SYSTEM_PROMPT_FILE
     system_prompt = load_prompt_file(system_prompt_file_path)
-    paths = file_utils.prepare_data_paths()
+    paths = file_utils.prepare_data_paths(table_name)
     sample_data_path = paths["data_file"]
     try:
         with open(sample_data_path, "r", encoding="utf-8") as f:
@@ -82,17 +82,17 @@ def create_nl2sqlchat_pompt(enriched_data_dict):
                 ## Database Dictionary -  
                 {enriched_data_dict}  
                 ## Table Name
-                {config.TABLE_NAME}
+                {table_name}
                 ## Sample Data
                 {sample_data}
             """
     return prompt
 
-def create_sql_from_nl(user_input, enriched_data_dict):
+def create_sql_from_nl(user_input, enriched_data_dict, table_name):
     """
     Generate SQL from user input and enriched data dictionary. No caching logic here.
     """
-    nl2sql_system_prompt = create_nl2sqlchat_pompt(enriched_data_dict)
+    nl2sql_system_prompt = create_nl2sqlchat_pompt(enriched_data_dict, table_name)
     nl2sql_user_prompt = f"Convert the following natural language question to SQL: {user_input}"
     response = call_response_api(llm_model, nl2sql_system_prompt, nl2sql_user_prompt)
     sql_result = response.choices[0].message.content

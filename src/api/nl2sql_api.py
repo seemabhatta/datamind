@@ -87,8 +87,8 @@ async def process_query(query: str):
         # Classify intent
         intent = llm_util.classify_intent(query)
         if intent.strip() == "SQL_QUERY":
-            # Generate SQL
-            sql_result = llm_util.create_sql_from_nl(query, enriched_data_dict)
+            # Generate SQL with the correct table name
+            sql_result = llm_util.create_sql_from_nl(query, enriched_data_dict, base_name)
             # For now, just return the SQL
             return {
                 "status": "success",
