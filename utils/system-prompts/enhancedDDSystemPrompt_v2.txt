@@ -57,14 +57,14 @@ tables:
         description: Total amount
         dataType: FLOAT
         default_aggregation: sum
-        sampleValues: [100.0, 200.0]
+        sampleValues: ["100.0", "200.0"]
     dimensions:
       - name: customerId
         expr: customer_id
         description: Unique customer identifier
         dataType: INT
         unique: true
-        sampleValues: [1, 2]
+        sampleValues: ["1", "2"]
         cortexSearchService: null
         cortexSearchServiceName: null
         isEnum: false
@@ -110,23 +110,16 @@ verified_queries:
   - expr
   - dataType
   - unique (if applicable)
-  - sampleValues (all values must be strings)
-  - cortexSearchService (if applicable)
-  - cortexSearchServiceName (if applicable)
-  - isEnum (if applicable)
-
-Example:
 name: CustomerOrdersModel
 
-# List of tables
 tables:
   - name: customers
     description: Customer table
-    base_table:
+    baseTable:
       database: mydb
       schema: public
       table: customers
-    primary_key:
+    primaryKey:
       columns: [customer_id]
     dimensions:
       - name: customer_id
@@ -149,11 +142,11 @@ tables:
         sampleValues: ["100.0", "200.0"]
   - name: orders
     description: Orders table
-    base_table:
+    baseTable:
       database: mydb
       schema: public
       table: orders
-    primary_key:
+    primaryKey:
       columns: [order_id]
     dimensions:
       - name: order_id
@@ -164,18 +157,24 @@ tables:
         unique: true
         isEnum: false
 
-# Top-level relationships
 relationships:
   - name: customer_orders
-    left_table: customers
-    right_table: orders
-    relationship_columns:
-      - left_column: customer_id
-        right_column: customer_id
-    join_type: inner
-    relationship_type: many_to_one
+    leftTable: customers
+    rightTable: orders
+    relationshipColumns:
+      - leftColumn: customer_id
+        rightColumn: customer_id
+    joinType: inner
+    relationshipType: many_to_one
 
-Ensure consistent indentation and formatting throughout the YAML output.
-Include all tables and columns from the provided dataset in the data dictionary.
-Do not include any explanation or non-YAML content in the output.
-All values in sampleValues must be strings, even if they look like numbers.
+verifiedQueries:
+  - name: orders_by_customer
+    question: What are the orders for each customer?
+    sql: SELECT * FROM orders JOIN customers ON orders.customer_id = customers.customer_id
+    verifiedAt: "2024-06-29"
+    verifiedBy: "admin"
+
+# STRICT YAML STRUCTURE RULES
+- All YAML lists and blocks must be properly indented and closed. Do not start a new list item unless the previous block is complete and at the correct indentation level.
+- For every nested list, ensure you end the parent block before starting a new block at the same level.
+- Double-check that every list or mapping is properly closed before starting a new one.

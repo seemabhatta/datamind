@@ -188,6 +188,18 @@ def validate_semantic_model(yaml_str):
         raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
 
 
+import datetime
+
+def convert_dates_to_strings(obj):
+    if isinstance(obj, dict):
+        return {k: convert_dates_to_strings(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_dates_to_strings(i) for i in obj]
+    elif isinstance(obj, (datetime.date, datetime.datetime)):
+        return obj.isoformat()
+    else:
+        return obj
+
 def validate_yaml_with_proto(yaml_str):
     """
     Validates a YAML string against the SemanticModel protobuf schema.
@@ -195,6 +207,7 @@ def validate_yaml_with_proto(yaml_str):
     """
     try:
         data = yaml.safe_load(yaml_str)
+        data = convert_dates_to_strings(data)
         # Convert YAML dict to protobuf
         ParseDict(data, SemanticModel())
         return True, None
