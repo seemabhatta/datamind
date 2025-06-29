@@ -8,6 +8,9 @@ import pandas as pd
 import sqlite3
 from typing import Optional
 
+import time
+import gc
+
 from utils import cache_utils
 
 # Add the project root to the path so we can import modules
@@ -96,6 +99,7 @@ def get_db_connection(base_name: str) -> Optional[sqlite3.Connection]:
     return sqlite3.connect(db_file_path)
 
 
+
 def cleanup_files(base_name=None):
     """
     Delete all files and folders related to the provided base_name from /data,
@@ -104,22 +108,17 @@ def cleanup_files(base_name=None):
     if base_name:
         data_dir = Path("data") / base_name
         if data_dir.exists() and data_dir.is_dir():
-            shutil.rmtree(data_dir)
-            print(f"Deleted data directory: {data_dir}")
+            # Try to force close all file handles and retry deletion
+            for _ in range(3):
+                try:
+                    gc.collect()
+                    shutil.rmtree(data_dir)
+                    print(f"Deleted data directory: {data_dir}")
+                    break
+                except PermissionError as e:
+                    print(f"PermissionError: {e}. Retrying...")
+                    time.sleep(0.1)
+            else:
+                print(f"Could not delete {data_dir}: Access denied.")
     cache_utils.clear_session_cache()
     print("Sample data file and both data dictionaries deleted.")
-
-
-def load_data_dict(base_name=None):
-    """
-    Load the data dictionary YAML file from /data/<base_name>/<base_name>.yaml.
-    If base_name is None, returns None.
-    """
-    if not base_name:
-        return None
-    paths = prepare_data_paths(base_name)
-    data_dict_file_path = paths["dict_file"]
-    if not Path(data_dict_file_path).exists():
-        return None
-    with open(data_dict_file_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)        
