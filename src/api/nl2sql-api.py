@@ -37,16 +37,8 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     
     try:
-        # Save the uploaded file
-        sample_data_path = file_utils.get_sample_data_path()
-        sample_data_path.parent.mkdir(exist_ok=True)
-        
-        # Read the file content
-        content = await file.read()
-        
-        # Write to file
-        with open(sample_data_path, "wb") as f:
-            f.write(content)
+        # Save the uploaded file using the new utility
+        file_utils.save_uploaded_file(file)
         
         # Generate enhanced data dictionary
         sample_data_filename = config.SAMPLE_DATA_FILENAME
