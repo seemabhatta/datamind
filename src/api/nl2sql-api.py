@@ -31,38 +31,39 @@ BASE_DIR = Path(__file__).parent.resolve()
 @app.post("/upload-file/")
 async def upload_file(file: UploadFile = File(...)):
     """
-    Upload a CSV file and generate a data dictionary
+    Upload a CSV file and generate a data dictionary and SQLite DB.
     """
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     
+    base_name = Path(file.filename).stem
+
     try:
-        # Save the uploaded file using the new utility
+        # 1. Save uploaded file
         file_utils.save_uploaded_file(file)
         
-        # Generate enhanced data dictionary
-        sample_data_filename = config.SAMPLE_DATA_FILENAME
-        llm_util.save_enhanced_data_dictionary_to_yaml_file(sample_data_filename)
-        
-        # Look for data dictionary in project root
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-        generated_dict = Path(project_root) / config.DATA_DICT_FILENAME
-        if generated_dict.exists():
-            # Load the generated dictionary to return in the response
-            with open(generated_dict, "r", encoding="utf-8") as f:
-                data_dict = yaml.safe_load(f)
-            return {
-                "status": "success",
-                "message": "File uploaded and data dictionary generated successfully",
-                "data_dictionary": data_dict
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to generate data dictionary")
-    
+        # 2. Generate enhanced data dictionary as YAML text
+        yaml_text = llm_util.generate_enhanced_data_dictionary(file)
+
+        # 3. Save YAML
+        file_utils.save_dict_yaml(yaml_text, base_name)
+
+        # 4. Save SQLite DB (read from the just-uploaded file)
+        paths = file_utils.prepare_data_paths(base_name)
+        file_path = paths["directory"] / file.filename
+        df = pandas.read_csv(file_path)
+        file_utils.save_dataframe_to_sqlite(df, base_name)
+
+        # 5. Return parsed data dictionary
+        return {
+            "status": "success",
+            "message": "File uploaded, data dictionary and database generated successfully",
+            "data_dictionary": yaml.safe_load(yaml_text)
+        }
     except Exception as e:
-        # Clean up any partial files
-        file_utils.cleanup_files()
+        file_utils.cleanup_files(base_name)
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+       
 
 @app.post("/query/")
 async def process_query(query: str):
@@ -70,22 +71,22 @@ async def process_query(query: str):
     Process a natural language query and return SQL and results
     """
     try:
-        # Check if data dictionary exists
-        data_dict_path = file_utils.get_data_dict_path()
-        if not data_dict_path.exists():
+        # For simplicity, use the first available data dictionary in the data directory
+        data_dir = Path("data")
+        if not data_dir.exists() or not any(data_dir.iterdir()):
             raise HTTPException(status_code=400, detail="No data dictionary found. Please upload a file first.")
-        
-        # Load data dictionary
-        enriched_data_dict = file_utils.load_data_dict()
-        
+        # Pick the first subdirectory as the active dataset
+        base_name = next((p.name for p in data_dir.iterdir() if p.is_dir()), None)
+        if not base_name:
+            raise HTTPException(status_code=400, detail="No data dictionary found. Please upload a file first.")
+        enriched_data_dict = file_utils.get_data_dict(base_name)
+        if not enriched_data_dict:
+            raise HTTPException(status_code=400, detail="Data dictionary could not be loaded.")
         # Classify intent
         intent = llm_util.classify_intent(query)
-        
         if intent.strip() == "SQL_QUERY":
             # Generate SQL
             sql_result = llm_util.create_sql_from_nl(query, enriched_data_dict)
-            
-            # Execute SQL query (this would need to be implemented)
             # For now, just return the SQL
             return {
                 "status": "success",
@@ -98,7 +99,6 @@ async def process_query(query: str):
                 "intent": intent,
                 "message": "Non-SQL query detected"
             }
-    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 

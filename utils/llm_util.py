@@ -113,8 +113,9 @@ def generate_enhanced_data_dictionary(sample_data_file):
     and calls the LLM to generate an enhanced data dictionary. Returns the LLM's response as a string.
     Uses a more efficient prompt by sending only column names, types, and 2 sample values per column.
     """
-    # Always read sample data from the configured path
-    sample_data_path = file_utils.get_sample_data_path()
+    # Always read sample data from the default path
+    from pathlib import Path
+    sample_data_path = Path("data") / "hmda_sample_new" / "hmda_sample_new.csv"
     print(f"Loading sample data from {sample_data_path}...")
     try:
         df = pandas.read_csv(sample_data_path)
@@ -173,24 +174,9 @@ def generate_enhanced_data_dictionary(sample_data_file):
         print("No valid response from LLM.")
         return None
 
-def save_enhanced_data_dictionary_to_yaml_file(sample_data_file):
-    """
-    Generates the enhanced data dictionary and writes it to the configured YAML file in YAML format.
-    If the file does not exist, it will be created. If it exists, it will be overwritten.
-    Also prints the YAML content for debugging.
-    """
-    yaml_text = generate_enhanced_data_dictionary(sample_data_file)
-    if yaml_text is None:
-        print("Failed to generate YAML data dictionary.")
-        return
-
-    # Save to data/data-dict2.yaml using file_utils
-    output_path = file_utils.get_data_dict_path()
-    output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure 'data/' exists
-    try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(yaml_text)
-        print(f"YAML data dictionary saved to {output_path}")
-        print("First 500 characters of YAML:\n", yaml_text[:500])
-    except Exception as e:
-        print(f"Error writing YAML file: {e}")
+# def save_enhanced_data_dictionary_to_yaml_file(sample_data_file):
+#     """
+#     Generates the enhanced data dictionary and returns it as a YAML string.
+#     """
+#     yaml_text = generate_enhanced_data_dictionary(sample_data_file)
+#     return yaml_text
