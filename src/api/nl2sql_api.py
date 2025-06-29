@@ -31,7 +31,7 @@ async def upload_file(file: UploadFile = File(...)):
         uploaded_file_path = file_utils.save_uploaded_file(file)
         yaml_text = llm_util.generate_enhanced_data_dictionary(uploaded_file_path)
         file_utils.save_dict_yaml(yaml_text, base_name)
-        df = pandas.read_csv(uploaded_file_path)
+        df = pd.read_csv(uploaded_file_path)
         file_utils.save_dataframe_to_sqlite(df, base_name)
         return {
             "status": "success",
