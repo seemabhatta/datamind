@@ -21,6 +21,18 @@ app.add_middleware(
 )
 BASE_DIR = Path(__file__).parent.resolve()
 
+@app.get("/list-datasets/")
+async def list_datasets():
+    """List all dataset folders in the data directory."""
+    try:
+        data_dir = BASE_DIR.parent.parent / "data"
+        if not data_dir.exists():
+            return {"status": "success", "datasets": []}
+        datasets = [f.name for f in data_dir.iterdir() if f.is_dir()]
+        return {"status": "success", "datasets": datasets}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing datasets: {str(e)}")
+        
 @app.post("/upload-file/")
 async def upload_file(file: UploadFile = File(...)):
     """Upload a CSV file, generate a data dictionary and SQLite DB."""
