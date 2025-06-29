@@ -30,6 +30,13 @@ async def upload_file(file: UploadFile = File(...)):
     try:
         uploaded_file_path = file_utils.save_uploaded_file(file)
         yaml_text = llm_util.generate_enhanced_data_dictionary(uploaded_file_path)
+        
+        # Validate YAML against protobuf schema before saving
+        is_valid, error = llm_util.validate_yaml_with_proto(yaml_text)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"Generated YAML is not protobuf-compatible: {error}")
+        
+        #save yaml to file
         file_utils.save_dict_yaml(yaml_text, base_name)
         df = pd.read_csv(uploaded_file_path)
         file_utils.save_dataframe_to_sqlite(df, base_name)

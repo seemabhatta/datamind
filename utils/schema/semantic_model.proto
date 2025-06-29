@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package semanticmodel;
+
+message SemanticModel {
+  string name = 1;
+  repeated Table tables = 2;
+  repeated Relationship relationships = 3;
+  repeated VerifiedQuery verified_queries = 4;
+}
+
+message Table {
+  string name = 1;
+  string description = 2;
+  BaseTable base_table = 3;
+  PrimaryKey primary_key = 4;
+  repeated TimeDimension time_dimensions = 5;
+  repeated Measure measures = 6;
+  repeated Dimension dimensions = 7;
+}
+
+message BaseTable {
+  string database = 1;
+  string schema = 2;
+  string table = 3;
+}
+
+message PrimaryKey {
+  repeated string columns = 1;
+}
+
+message TimeDimension {
+  string name = 1;
+  string expr = 2;
+  string description = 3;
+  string dataType = 4;
+  bool unique = 5;
+  repeated string sampleValues = 6;
+}
+
+message Measure {
+  string name = 1;
+  repeated string synonyms = 2;
+  string description = 3;
+  string expr = 4;
+  string dataType = 5;
+  string default_aggregation = 6;
+  repeated string sampleValues = 7;
+}
+
+message Dimension {
+  string name = 1;
+  repeated string synonyms = 2;
+  string description = 3;
+  string expr = 4;
+  string dataType = 5;
+  bool unique = 6;
+  repeated string sampleValues = 7;
+  string cortexSearchService = 8;
+  string cortexSearchServiceName = 9;
+  bool isEnum = 10;
+}
+
+message Relationship {
+  string name = 1;
+  string left_table = 2;
+  string right_table = 3;
+  repeated RelationshipColumn relationship_columns = 4;
+  string join_type = 5;
+  string relationship_type = 6;
+}
+
+message RelationshipColumn {
+  string left_column = 1;
+  string right_column = 2;
+}
+
+message VerifiedQuery {
+  string name = 1;
+  string question = 2;
+  string sql = 3;
+  string verified_at = 4;
+  string verified_by = 5;
+}

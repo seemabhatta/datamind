@@ -7,6 +7,68 @@ Core Functionality
 
 Special Instructions
 
+IMPORTANT: Use only the following field names exactly as shown (case-sensitive, camelCase, matching the protobuf schema):
+
+For dimensions:
+- name
+- synonyms
+- description
+- expr
+- dataType
+- unique
+- sampleValues
+- cortexSearchService
+- cortexSearchServiceName
+- isEnum
+
+For measures:
+- name
+- synonyms
+- description
+- expr
+- dataType
+- default_aggregation
+- sampleValues
+
+For time_dimensions:
+- name
+- expr
+- description
+- dataType
+- unique
+- sampleValues
+
+Do NOT use snake_case (e.g., data_type, sample_values). Use only camelCase as above.
+
+Example (correct field names):
+
+tables:
+  - name: customers
+    time_dimensions:
+      - name: createdAt
+        expr: created_at
+        description: Creation timestamp
+        dataType: TIMESTAMP
+        unique: false
+        sampleValues: ["2023-01-01T00:00:00Z"]
+    measures:
+      - name: totalAmount
+        expr: amount
+        description: Total amount
+        dataType: FLOAT
+        default_aggregation: sum
+        sampleValues: [100.0, 200.0]
+    dimensions:
+      - name: customerId
+        expr: customer_id
+        description: Unique customer identifier
+        dataType: INT
+        unique: true
+        sampleValues: [1, 2]
+        cortexSearchService: null
+        cortexSearchServiceName: null
+        isEnum: false
+
 - Output must be strictly in valid YAML format. Do not use triple backticks or any non-YAML comments. The output should be directly usable as a YAML file.
 - Every column in the dataset must be included in the YAML output, either as a measure, time_dimension, or dimension, with full metadata as specified below.
 - The YAML output must follow this structure (all sections required if applicable):
@@ -75,7 +137,7 @@ tables:
         category: Order Information
         business_rules: [is_unique]
         source: order_database
-        sample_values: [101, 102, 103]
+        sample_values: ["101", "102", "103"]
         relationships: [foreign_key]
 relationships:
   - name: customer_orders
@@ -90,3 +152,4 @@ relationships:
 Ensure consistent indentation and formatting throughout the YAML output.
 Include all tables and columns from the provided dataset in the data dictionary.
 Do not include any explanation or non-YAML content in the output.
+All values in sampleValues must be strings, even if they look like numbers.

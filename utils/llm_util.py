@@ -7,6 +7,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import pandas as pd
 import yaml
+from google.protobuf.json_format import ParseDict
+from utils.schema.semantic_model_pb2 import SemanticModel  
 
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
@@ -172,9 +174,29 @@ def generate_enhanced_data_dictionary(sample_data_path):
         print("No valid response from LLM.")
         return None
 
-# def save_enhanced_data_dictionary_to_yaml_file(sample_data_file):
-#     """
-#     Generates the enhanced data dictionary and returns it as a YAML string.
-#     """
-#     yaml_text = generate_enhanced_data_dictionary(sample_data_file)
-#     return yaml_text
+def validate_semantic_model(yaml_str):
+    """
+    Validates a YAML string against the SemanticModel protobuf schema.
+    """
+    try:
+        is_valid, error = validate_yaml_with_proto(yaml_str)
+        if is_valid:
+            return {"status": "success", "message": "YAML is valid against the schema."}
+        else:
+            return {"status": "error", "message": error}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
+
+
+def validate_yaml_with_proto(yaml_str):
+    """
+    Validates a YAML string against the SemanticModel protobuf schema.
+    Returns (True, None) if valid, (False, error_message) if not.
+    """
+    try:
+        data = yaml.safe_load(yaml_str)
+        # Convert YAML dict to protobuf
+        ParseDict(data, SemanticModel())
+        return True, None
+    except Exception as e:
+        return False, str(e)
