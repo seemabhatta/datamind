@@ -8,6 +8,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from fastapi import Body
 
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))  
@@ -138,5 +139,34 @@ async def generate_summary(data: dict = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
 
+
+
+@app.post("/execute-sql/")
+async def execute_sql(sql: str = Body(...), base_name: str = Body(...)):
+    """
+    Execute a SQL query against the uploaded SQLite DB and return the results.
+    """
+    import sqlite3
+    import pandas as pd
+    from utils import file_utils
+
+    try:
+        # Get the database connection
+        conn = file_utils.get_db_connection(base_name)
+        if conn is None:
+            raise HTTPException(status_code=404, detail="Database not found.")
+
+        df = pd.read_sql_query(sql, conn)
+        conn.close()
+        # Convert DataFrame to JSON records
+        result = df.to_dict(orient="records")
+        columns = list(df.columns)
+        return {
+            "status": "success",
+            "columns": columns,
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error executing SQL: {str(e)}")
 if __name__ == "__main__":
     uvicorn.run("nl2sql-api:app", host="0.0.0.0", port=8000, reload=True)

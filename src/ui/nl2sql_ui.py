@@ -163,37 +163,50 @@ def main():
         if sql_result:
             ui_components.show_sql_query(sql_result)
         
+            # Determine the base_name from the uploaded file (strip extension)
+            base_name = None
+            if uploaded_file is not None:
+                base_name = os.path.splitext(uploaded_file.name)[0]
+            else:
+                # fallback: try to get from session or config
+                base_name = os.path.splitext(os.path.basename(sample_data_filename))[0]
+
+            # Call the backend API to execute the SQL
             try:
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                cursor.execute(sql_result)
-                query_result = cursor.fetchall()
-                columns = [desc[0] for desc in cursor.description]
-                df = pandas.DataFrame(query_result, columns=columns)
-                conn.close()
-                ui_components.show_query_result(df)
-            
-                # Convert DataFrame to JSON for API request
-                df_json = df.to_json(orient='records')
-                try:
-                    # Send DataFrame to API for summary generation
-                    response = requests.post(
-                        f"{API_URL}/generate-summary/",
-                        json={"data": df_json}
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-                    
-                    if result.get("status") == "success":
-                        summary = result.get("summary", "No summary available")
-                        ui_components.show_summary(summary)
-                    else:
-                        st.warning("Could not generate summary: " + result.get("detail", "Unknown error"))
-                except Exception as e:
-                    st.warning(f"Could not generate summary: {e}")
-                    # Continue execution even if summary fails
+                exec_response = requests.post(
+                    f"{API_URL}/execute-sql/",
+                    json={"sql": sql_result, "base_name": base_name}
+                )
+                exec_response.raise_for_status()
+                exec_result = exec_response.json()
+                if exec_result.get("status") == "success":
+                    columns = exec_result.get("columns", [])
+                    result = exec_result.get("result", [])
+                    df = pandas.DataFrame(result, columns=columns)
+                    ui_components.show_query_result(df)
+
+                    # Convert DataFrame to JSON for API request
+                    df_json = df.to_json(orient='records')
+                    try:
+                        # Send DataFrame to API for summary generation
+                        response = requests.post(
+                            f"{API_URL}/generate-summary/",
+                            json={"data": df_json}
+                        )
+                        response.raise_for_status()
+                        result = response.json()
+                        if result.get("status") == "success":
+                            summary = result.get("summary", "No summary available")
+                            ui_components.show_summary(summary)
+                        else:
+                            st.warning("Could not generate summary: " + result.get("detail", "Unknown error"))
+                    except Exception as e:
+                        st.warning(f"Could not generate summary: {e}")
+                        # Continue execution even if summary fails
+                else:
+                    st.error("SQL execution failed: " + exec_result.get("detail", "Unknown error"))
             except Exception as exp:
-                st.error(f"An error occurred: {exp}")
+                st.error(f"An error occurred during SQL execution: {exp}")
         # Clear the input
         #st.session_state.user_query = ""
         #st.session_state["user_query"] = ""
