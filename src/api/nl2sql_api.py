@@ -40,16 +40,17 @@ async def upload_file(file: UploadFile = File(...)):
 
     try:
         # 1. Save uploaded file
-        file_utils.save_uploaded_file(file)
+        uploaded_file_path = file_utils.save_uploaded_file(file)
         
         # 2. Generate enhanced data dictionary as YAML text
-        yaml_text = llm_util.generate_enhanced_data_dictionary(file)
+        yaml_text = llm_util.generate_enhanced_data_dictionary(uploaded_file_path)
 
         # 3. Save YAML
         file_utils.save_dict_yaml(yaml_text, base_name)
 
         # 4. Save SQLite DB (read from the just-uploaded file)
         paths = file_utils.prepare_data_paths(base_name)
+        df = pandas.read_csv(uploaded_file_path)
         file_path = paths["directory"] / file.filename
         df = pandas.read_csv(file_path)
         file_utils.save_dataframe_to_sqlite(df, base_name)

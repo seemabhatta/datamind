@@ -107,15 +107,12 @@ def create_summary(df):
     return summery
 
 
-def generate_enhanced_data_dictionary(sample_data_file):
+def generate_enhanced_data_dictionary(sample_data_path):
     """
-    Loads the sample_data_file (CSV) from the sample-data directory, loads the system prompt from enhancedDDSystemPrompt.txt,
+    Loads the sample_data_file (CSV), loads the system prompt from enhancedDDSystemPrompt.txt,
     and calls the LLM to generate an enhanced data dictionary. Returns the LLM's response as a string.
     Uses a more efficient prompt by sending only column names, types, and 2 sample values per column.
     """
-    # Always read sample data from the default path
-    from pathlib import Path
-    sample_data_path = Path("data") / "hmda_sample_new" / "hmda_sample_new.csv"
     print(f"Loading sample data from {sample_data_path}...")
     try:
         df = pandas.read_csv(sample_data_path)

@@ -38,13 +38,13 @@ def save_uploaded_file(uploaded_file) -> Path:
     where <base_name> is the uploaded file's name without extension.
     Returns the Path to the saved file.
     """
-    filename = uploaded_file.name
+    filename = uploaded_file.filename
     base_name, ext = os.path.splitext(filename)
     paths = prepare_data_paths(base_name)
     # Save with original filename and extension in the correct subdirectory
     file_path = paths["directory"] / filename
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+        f.write(uploaded_file.file.read())
     return file_path
 
 def save_dict_yaml(yaml_content: str, base_name: str) -> Path:
