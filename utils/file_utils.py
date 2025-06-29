@@ -6,6 +6,7 @@ import shutil
 import config
 import pandas as pd
 import sqlite3
+from typing import Optional
 
 from utils import cache_utils
 
