@@ -1,11 +1,13 @@
 import os
-from pathlib import Path
+from pathlib import Path as PathlibPath
 import pandas as pd
 import yaml
 import sys
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query, Path
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import shutil
+import stat
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import config
@@ -19,7 +21,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-BASE_DIR = Path(__file__).parent.resolve()
+BASE_DIR = PathlibPath(__file__).parent.resolve()
 
 @app.get("/list-datasets/")
 async def list_datasets():
@@ -106,6 +108,23 @@ async def clear_data():
         return {"status": "success", "message": "All data cleared successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error clearing data: {str(e)}")
+
+def remove_readonly(func, path, excinfo):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+@app.delete("/delete-dataset/{dataset_name}/")
+async def delete_dataset(dataset_name: str = Path(..., description="Name of the dataset to delete")):
+    """Delete a specific dataset folder."""
+    try:
+        data_dir = BASE_DIR.parent.parent / "data" / dataset_name
+        if data_dir.exists() and data_dir.is_dir():
+            shutil.rmtree(data_dir, onerror=remove_readonly)
+            return {"status": "success", "detail": f"Dataset '{dataset_name}' deleted."}
+        else:
+            return {"status": "error", "detail": "Dataset not found."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting dataset: {str(e)}")
 
 @app.post("/generate-summary/")
 async def generate_summary(data: dict = Body(...)):

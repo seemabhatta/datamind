@@ -26,6 +26,20 @@ def show_upload_process():
                 files = get_files_in_dataset(selected_dataset)
                 st.write(f"Files in {selected_dataset}:", files)
 
+                # Add delete button
+                if st.button(f"Delete Dataset '{selected_dataset}'"):
+                    with st.spinner("Deleting dataset..."):
+                        try:
+                            resp = requests.delete(f"{API_URL}/delete-dataset/{selected_dataset}/")
+                            resp.raise_for_status()
+                            result = resp.json()
+                            if result.get("status") == "success":
+                                st.success(result.get("detail"))
+                                st.experimental_rerun()  # Refresh the page to update the dataset list
+                            else:
+                                st.error(result.get("detail", "Unknown error"))
+                        except Exception as e:
+                            st.error(f"Error deleting dataset: {e}")
         else:
             st.info("No datasets found. Upload a CSV to get started.")
     except Exception as e:
