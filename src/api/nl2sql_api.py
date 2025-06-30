@@ -52,7 +52,7 @@ async def upload_file(file: UploadFile = File(...)):
     """Upload a CSV file, generate a data dictionary and SQLite DB."""
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
-    base_name = Path(file.filename).stem
+    base_name = PathlibPath(file.filename).stem
     try:
         uploaded_file_path = file_utils.save_uploaded_file(file)
         yaml_text = llm_util.generate_enhanced_data_dictionary(uploaded_file_path)
@@ -83,7 +83,7 @@ async def process_query(
 ):
     """Process a natural language query and return SQL."""
     try:
-        data_dir = Path("data")
+        data_dir = PathlibPath("data")
         if not data_dir.exists() or not any(data_dir.iterdir()):
             raise HTTPException(status_code=400, detail="No data dictionary found. Please upload a file first.")
         if not base_name:
