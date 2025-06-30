@@ -200,6 +200,17 @@ def convert_dates_to_strings(obj):
     else:
         return obj
 
+def convert_sample_values_to_strings(data):
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k == "sampleValues" and isinstance(v, list):
+                data[k] = [str(item) for item in v]
+            else:
+                convert_sample_values_to_strings(v)
+    elif isinstance(data, list):
+        for item in data:
+            convert_sample_values_to_strings(item)
+    return data
 def validate_yaml_with_proto(yaml_str):
     """
     Validates a YAML string against the SemanticModel protobuf schema.
@@ -208,6 +219,7 @@ def validate_yaml_with_proto(yaml_str):
     try:
         data = yaml.safe_load(yaml_str)
         data = convert_dates_to_strings(data)
+        data = convert_sample_values_to_strings(data)
         # Convert YAML dict to protobuf
         ParseDict(data, SemanticModel())
         return True, None
