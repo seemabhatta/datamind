@@ -28,7 +28,7 @@ def resolve_prompt_path(system_prompts_dir, prompt_filename):
     prompt_path = os.path.join(project_root, system_prompts_dir, prompt_filename)
     return os.path.abspath(prompt_path)
 
-def prepare_data_paths(base_name: str = "hmda_sample_new", data_dir: str = "data") -> dict[str, Path]:
+def prepare_data_paths(base_name: str , data_dir: str = "data") -> dict[str, Path]:
     """
     Given a base filename (without extension), ensure the /data/<base_name> directory exists,
     and return a dict with Path objects for .csv, .db, and .yaml files.

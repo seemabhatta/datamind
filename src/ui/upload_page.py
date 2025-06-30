@@ -3,6 +3,14 @@ import requests
 
 API_URL = "http://localhost:8000"
 
+def get_files_in_dataset(dataset_name):
+    response = requests.get(f"{API_URL}/list-files/{dataset_name}/")
+    if response.status_code == 200:
+        return response.json().get("files", [])
+    else:
+        st.error(f"Failed to fetch files: {response.text}")
+        return []
+
 def show_upload_process():
     st.header("Upload & Process Dataset")
 
@@ -13,7 +21,11 @@ def show_upload_process():
         resp.raise_for_status()
         datasets = resp.json().get("datasets", [])
         if datasets:
-            st.write(datasets)
+            selected_dataset = st.selectbox("Select a dataset to view files", datasets)
+            if selected_dataset:
+                files = get_files_in_dataset(selected_dataset)
+                st.write(f"Files in {selected_dataset}:", files)
+
         else:
             st.info("No datasets found. Upload a CSV to get started.")
     except Exception as e:

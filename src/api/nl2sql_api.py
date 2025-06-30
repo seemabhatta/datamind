@@ -33,6 +33,18 @@ async def list_datasets():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing datasets: {str(e)}")
         
+@app.get("/list-files/{dataset_name}/")
+async def list_files(dataset_name: str):
+    """List all files in a specific dataset folder."""
+    try:
+        data_dir = BASE_DIR.parent.parent / "data" / dataset_name
+        if not data_dir.exists() or not data_dir.is_dir():
+            return {"status": "success", "files": []}
+        files = [f.name for f in data_dir.iterdir() if f.is_file()]
+        return {"status": "success", "files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing files: {str(e)}")
+        
 @app.post("/upload-file/")
 async def upload_file(file: UploadFile = File(...)):
     """Upload a CSV file, generate a data dictionary and SQLite DB."""
