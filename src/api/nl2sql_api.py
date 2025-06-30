@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 import sys
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -63,13 +63,15 @@ async def upload_file(file: UploadFile = File(...)):
        
 
 @app.post("/query/")
-async def process_query(query: str):
+async def process_query(
+    query: str = Query(..., description="Natural language query"),
+    base_name: str = Query(..., description="Dataset base name (required)")
+):
     """Process a natural language query and return SQL."""
     try:
         data_dir = Path("data")
         if not data_dir.exists() or not any(data_dir.iterdir()):
             raise HTTPException(status_code=400, detail="No data dictionary found. Please upload a file first.")
-        base_name = next((p.name for p in data_dir.iterdir() if p.is_dir()), None)
         if not base_name:
             raise HTTPException(status_code=400, detail="No data dictionary found. Please upload a file first.")
         enriched_data_dict = file_utils.get_data_dict(base_name)

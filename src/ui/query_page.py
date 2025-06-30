@@ -29,7 +29,8 @@ def show_query():
         if st.button("Run Query") and user_query.strip():
             with st.spinner("Processing query..."):
                 try:
-                    params = {"query": user_query}
+                    # Always include base_name in params for /query/
+                    params = {"query": user_query, "base_name": base_name}
                     response = requests.post(f"{API_URL}/query/", params=params)
                     response.raise_for_status()
                     result = response.json()
@@ -49,6 +50,7 @@ def show_query():
                         )
                         exec_response.raise_for_status()
                         exec_result = exec_response.json()
+                    
                         if exec_result.get("status") == "success":
                             columns = exec_result.get("columns", [])
                             data = exec_result.get("result", [])
