@@ -57,6 +57,22 @@ class QueryRequest(BaseModel):
     table_name: str
     dictionary_content: Optional[str] = None
 
+class TableSelectionRequest(BaseModel):
+    connection_id: str
+    tables: List[str]  # List of table names to analyze
+
+class DataDictionaryRequest(BaseModel):
+    connection_id: str
+    tables: List[str]
+    database_name: str
+    schema_name: str
+
+class SaveDictionaryRequest(BaseModel):
+    connection_id: str
+    stage_name: str
+    file_name: str
+    yaml_content: str
+
 @app.post("/connect", response_model=SnowflakeConnectionResponse)
 async def connect_to_snowflake():
     """Establish connection to Snowflake using environment variables"""
@@ -264,7 +280,7 @@ async def load_stage_file(
     stage_name: str = Query(..., description="Full stage name"),
     file_name: str = Query(..., description="File name in stage")
 ):
-    """Load content from a stage file (assumes it's a text file like YAML)"""
+    """Load YAML data dictionary from Snowflake stage file"""
     if connection_id not in snowflake_connections:
         raise HTTPException(status_code=404, detail="Connection not found")
     
@@ -272,34 +288,35 @@ async def load_stage_file(
         conn = snowflake_connections[connection_id]["connection"]
         cursor = conn.cursor()
         
-        # Create a temporary table to load the file
-        temp_table = f"temp_file_load_{uuid.uuid4().hex[:8]}"
+        print(f"DEBUG: Loading stage file {file_name} from {stage_name}")
         
-        # Create temporary table
-        cursor.execute(f"""
-            CREATE OR REPLACE TEMPORARY TABLE {temp_table} (
-                content VARCHAR(16777216)
-            )
-        """)
+        # Read file content directly from stage using SELECT
+        select_sql = f"""
+        SELECT $1 as content 
+        FROM '{stage_name}/{file_name}'
+        (FILE_FORMAT => (TYPE='CSV' FIELD_DELIMITER=NONE RECORD_DELIMITER='\\n' SKIP_HEADER=0))
+        """
         
-        # Copy file content to temp table
-        cursor.execute(f"""
-            COPY INTO {temp_table}
-            FROM '{stage_name}/{file_name}'
-            FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '|' RECORD_DELIMITER = '\\n' SKIP_HEADER = 0)
-        """)
-        
-        # Read content
-        cursor.execute(f"SELECT content FROM {temp_table}")
+        cursor.execute(select_sql)
         rows = cursor.fetchall()
-        content = "\n".join([row[0] for row in rows])
+        content = "\n".join([row[0] for row in rows if row[0]])
         
-        # Clean up
-        cursor.execute(f"DROP TABLE {temp_table}")
         cursor.close()
         
+        print(f"DEBUG: Loaded {len(content)} characters from stage file")
+        
+        # Validate that it's YAML content
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="Stage file is empty")
+        
+        # Basic YAML validation - check for common YAML indicators
+        if not any(indicator in content for indicator in [':', '-', 'fields:', 'tables:', 'columns:']):
+            raise HTTPException(status_code=400, detail="File does not appear to be a valid YAML data dictionary")
+        
         return {"content": content}
+        
     except Exception as e:
+        print(f"DEBUG: Error loading stage file: {e}")
         raise HTTPException(status_code=500, detail=f"Error loading stage file: {str(e)}")
 
 @app.post("/connection/{connection_id}/query")
@@ -320,19 +337,62 @@ async def process_nl_query(connection_id: str, request: QueryRequest):
                 "query": request.query
             }
         
-        # Step 2: Generate SQL using existing NL2SQL function
+        # Step 2: Generate SQL using proper NL2SQL processing like nl2sql_api.py
         if request.dictionary_content:
             # Debug logging
             print(f"DEBUG: Processing query: {request.query}")
             print(f"DEBUG: Table name: {request.table_name}")
             print(f"DEBUG: Dictionary length: {len(request.dictionary_content)} characters")
             
-            # Use provided dictionary for SQL generation
-            generated_sql = llm_util.create_sql_from_nl(
-                request.query, 
-                request.dictionary_content, 
-                request.table_name
-            )
+            # Get connection for sample data
+            conn = snowflake_connections[connection_id]["connection"]
+            conn_details = snowflake_connections[connection_id]
+            database = conn_details.get("database", "")
+            schema = conn_details.get("schema", "")
+            
+            # Construct full table name if needed
+            if "." not in request.table_name and database and schema:
+                full_table_name = f"{database}.{schema}.{request.table_name}"
+            else:
+                full_table_name = request.table_name
+            
+            # Create enriched prompt like the original NL2SQL API
+            try:
+                # Load system prompt from file (like nl2sql_api does)
+                system_prompt_file_path = "nl2sqlSystemPrompt.txt"
+                system_prompt = llm_util.load_prompt_file(system_prompt_file_path)
+                
+                # Get sample data from Snowflake table (equivalent to CSV sample data)
+                sample_sql = f"SELECT * FROM {full_table_name} LIMIT 5"
+                sample_df = pd.read_sql_query(sample_sql, conn)
+                sample_data = sample_df.to_string(max_rows=5)
+                
+                # Build comprehensive prompt like create_nl2sqlchat_pompt() does
+                enriched_prompt = f"""
+                {system_prompt}
+                ## Database Dictionary -  
+                {request.dictionary_content}  
+                ## Table Name
+                {full_table_name}
+                ## Sample Data
+                {sample_data}
+                """
+                
+                print(f"DEBUG: Using enriched prompt with sample data")
+                
+                # Call LLM with enriched prompt
+                nl2sql_user_prompt = f"Convert the following natural language question to SQL: {request.query}"
+                response = llm_util.call_response_api(llm_util.llm_model, enriched_prompt, nl2sql_user_prompt)
+                generated_sql = response.choices[0].message.content
+                
+            except Exception as sample_error:
+                print(f"DEBUG: Could not get sample data: {sample_error}")
+                # Fallback to basic dictionary without sample data
+                generated_sql = llm_util.create_sql_from_nl(
+                    request.query, 
+                    request.dictionary_content, 
+                    request.table_name
+                )
             
             print(f"DEBUG: Generated SQL: {generated_sql}")
         else:
@@ -457,6 +517,263 @@ async def execute_sql(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error executing SQL: {str(e)}")
+
+@app.post("/connection/{connection_id}/analyze-tables")
+async def analyze_tables(connection_id: str, request: TableSelectionRequest):
+    """Analyze selected tables and generate sample data for data dictionary creation"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        conn = snowflake_connections[connection_id]["connection"]
+        conn_details = snowflake_connections[connection_id]
+        database = conn_details.get("database", "")
+        schema = conn_details.get("schema", "")
+        
+        table_analysis = {}
+        
+        for table_name in request.tables:
+            print(f"DEBUG: Analyzing table {table_name}")
+            
+            # Construct full table name if needed
+            if "." not in table_name and database and schema:
+                full_table_name = f"{database}.{schema}.{table_name}"
+            else:
+                full_table_name = table_name
+            
+            try:
+                # Get table schema information
+                cursor = conn.cursor()
+                cursor.execute(f"DESCRIBE TABLE {full_table_name}")
+                schema_info = cursor.fetchall()
+                
+                # Get sample data
+                sample_sql = f"SELECT * FROM {full_table_name} LIMIT 10"
+                sample_df = pd.read_sql_query(sample_sql, conn)
+                
+                # Get table statistics
+                stats_sql = f"SELECT COUNT(*) as row_count FROM {full_table_name}"
+                stats_df = pd.read_sql_query(stats_sql, conn)
+                row_count = stats_df.iloc[0]['ROW_COUNT']
+                
+                # Analyze each column
+                columns_info = []
+                for col_info in schema_info:
+                    col_name = col_info[0]
+                    col_type = col_info[1]
+                    col_nullable = col_info[2]
+                    
+                    # Get column statistics if it's numeric
+                    if 'NUMBER' in col_type.upper() or 'FLOAT' in col_type.upper():
+                        try:
+                            col_stats_sql = f"""
+                            SELECT 
+                                MIN({col_name}) as min_val,
+                                MAX({col_name}) as max_val,
+                                AVG({col_name}) as avg_val,
+                                COUNT(DISTINCT {col_name}) as distinct_count
+                            FROM {full_table_name}
+                            """
+                            col_stats_df = pd.read_sql_query(col_stats_sql, conn)
+                            col_stats = col_stats_df.iloc[0].to_dict()
+                        except:
+                            col_stats = {}
+                    else:
+                        # For string columns, get distinct count and sample values
+                        try:
+                            col_stats_sql = f"""
+                            SELECT 
+                                COUNT(DISTINCT {col_name}) as distinct_count,
+                                COUNT({col_name}) as non_null_count
+                            FROM {full_table_name}
+                            """
+                            col_stats_df = pd.read_sql_query(col_stats_sql, conn)
+                            col_stats = col_stats_df.iloc[0].to_dict()
+                        except:
+                            col_stats = {}
+                    
+                    columns_info.append({
+                        "name": col_name,
+                        "type": col_type,
+                        "nullable": col_nullable == "Y",
+                        "statistics": col_stats,
+                        "sample_values": sample_df[col_name].head(5).tolist() if col_name in sample_df.columns else []
+                    })
+                
+                cursor.close()
+                
+                table_analysis[table_name] = {
+                    "full_name": full_table_name,
+                    "row_count": row_count,
+                    "columns": columns_info,
+                    "sample_data": sample_df.head(5).to_dict(orient="records")
+                }
+                
+                print(f"DEBUG: Successfully analyzed table {table_name} with {len(columns_info)} columns")
+                
+            except Exception as table_error:
+                print(f"DEBUG: Error analyzing table {table_name}: {table_error}")
+                table_analysis[table_name] = {
+                    "error": str(table_error),
+                    "full_name": full_table_name
+                }
+        
+        return {
+            "status": "success",
+            "connection_id": connection_id,
+            "database": database,
+            "schema": schema,
+            "tables_analyzed": len(request.tables),
+            "analysis": table_analysis
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing tables: {str(e)}")
+
+@app.post("/connection/{connection_id}/generate-data-dictionary")
+async def generate_data_dictionary(connection_id: str, request: DataDictionaryRequest):
+    """Generate YAML data dictionary from analyzed table data using LLM"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        # First analyze the tables
+        table_request = TableSelectionRequest(
+            connection_id=connection_id,
+            tables=request.tables
+        )
+        analysis_result = await analyze_tables(connection_id, table_request)
+        
+        if analysis_result["status"] != "success":
+            raise HTTPException(status_code=500, detail="Failed to analyze tables")
+        
+        # Prepare data for LLM processing
+        table_analysis = analysis_result["analysis"]
+        
+        # Create a temporary CSV-like structure for the LLM utility
+        combined_data = []
+        all_columns = []
+        
+        for table_name, table_info in table_analysis.items():
+            if "error" in table_info:
+                continue
+                
+            # Add sample data to combined dataset
+            for row in table_info.get("sample_data", []):
+                # Prefix column names with table name to avoid conflicts
+                prefixed_row = {f"{table_name}.{k}": v for k, v in row.items()}
+                combined_data.append(prefixed_row)
+            
+            # Track all columns with metadata
+            for col in table_info.get("columns", []):
+                col_info = {
+                    "table": table_name,
+                    "column": col["name"],
+                    "full_name": f"{table_name}.{col['name']}",
+                    "type": col["type"],
+                    "nullable": col["nullable"],
+                    "statistics": col.get("statistics", {}),
+                    "sample_values": col.get("sample_values", [])
+                }
+                all_columns.append(col_info)
+        
+        # Create a DataFrame from combined data for the LLM utility
+        if combined_data:
+            combined_df = pd.DataFrame(combined_data)
+            
+            # Save to temporary CSV for processing
+            temp_csv_path = f"/tmp/snowflake_tables_{connection_id[:8]}.csv"
+            combined_df.to_csv(temp_csv_path, index=False)
+            
+            print(f"DEBUG: Created temporary CSV with {len(combined_df)} rows and {len(combined_df.columns)} columns")
+            
+            # Use the existing LLM utility to generate enhanced data dictionary
+            yaml_text = llm_util.generate_enhanced_data_dictionary(temp_csv_path)
+            
+            # Validate YAML against protobuf schema
+            is_valid, error = llm_util.validate_yaml_with_proto(yaml_text)
+            if not is_valid:
+                print(f"WARNING: Generated YAML failed protobuf validation: {error}")
+                # Continue anyway, but note the warning
+            
+            # Clean up temporary file
+            import os
+            if os.path.exists(temp_csv_path):
+                os.remove(temp_csv_path)
+            
+            return {
+                "status": "success",
+                "connection_id": connection_id,
+                "database": request.database_name,
+                "schema": request.schema_name,
+                "tables": request.tables,
+                "yaml_dictionary": yaml_text,
+                "parsed_dictionary": yaml.safe_load(yaml_text),
+                "validation_status": "valid" if is_valid else "invalid",
+                "validation_error": error if not is_valid else None,
+                "tables_processed": len([t for t in table_analysis.values() if "error" not in t])
+            }
+            
+        else:
+            raise HTTPException(status_code=400, detail="No valid table data found to generate dictionary")
+        
+    except Exception as e:
+        print(f"DEBUG: Error generating data dictionary: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating data dictionary: {str(e)}")
+
+@app.post("/connection/{connection_id}/save-dictionary-to-stage")
+async def save_dictionary_to_stage(connection_id: str, request: SaveDictionaryRequest):
+    """Save YAML data dictionary to a Snowflake stage"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        conn = snowflake_connections[connection_id]["connection"]
+        cursor = conn.cursor()
+        
+        # Create a temporary table to hold the YAML content
+        temp_table = f"temp_yaml_save_{uuid.uuid4().hex[:8]}"
+        
+        # Create temporary table with the YAML content
+        cursor.execute(f"""
+            CREATE OR REPLACE TEMPORARY TABLE {temp_table} (
+                content STRING
+            )
+        """)
+        
+        # Insert YAML content line by line
+        yaml_lines = request.yaml_content.split('\n')
+        for line in yaml_lines:
+            # Escape single quotes in the content
+            escaped_line = line.replace("'", "''")
+            cursor.execute(f"INSERT INTO {temp_table} VALUES ('{escaped_line}')")
+        
+        # Copy from temp table to stage
+        copy_sql = f"""
+            COPY INTO '{request.stage_name}/{request.file_name}'
+            FROM (SELECT content FROM {temp_table})
+            FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '|' RECORD_DELIMITER = '\\n' SKIP_HEADER = FALSE)
+            OVERWRITE = TRUE
+            SINGLE = TRUE
+        """
+        
+        cursor.execute(copy_sql)
+        
+        # Clean up temp table
+        cursor.execute(f"DROP TABLE {temp_table}")
+        cursor.close()
+        
+        return {
+            "status": "success",
+            "message": f"YAML dictionary saved to {request.stage_name}/{request.file_name}",
+            "stage_name": request.stage_name,
+            "file_name": request.file_name,
+            "content_size": len(request.yaml_content)
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Error saving dictionary to stage: {e}")
+        raise HTTPException(status_code=500, detail=f"Error saving dictionary to stage: {str(e)}")
 
 @app.delete("/connection/{connection_id}")
 async def disconnect(connection_id: str):
