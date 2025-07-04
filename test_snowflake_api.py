@@ -286,6 +286,152 @@ class SnowflakeAPITester:
         print("✅ Disconnected successfully")
         self.connection_id = None
         return True
+    
+    def interactive_workflow(self) -> bool:
+        """AWS CLI-style interactive workflow for creating data dictionaries"""
+        print("🚀 Snowflake Data Dictionary Creation Wizard")
+        print("=" * 50)
+        
+        # Step 1: Connect
+        print("\n📋 Step 1: Connection")
+        if not self.connection_id:
+            print("🔗 Connecting to Snowflake...")
+            if not self.connect():
+                return False
+        else:
+            print("✅ Already connected")
+        
+        # Step 2: Select Database
+        print("\n📋 Step 2: Select Database")
+        if not self.list_databases():
+            return False
+        
+        while True:
+            database = input("\n💭 Enter database name: ").strip().upper()
+            if database:
+                break
+            print("❌ Database name cannot be empty")
+        
+        # Step 3: Select Schema
+        print(f"\n📋 Step 3: Select Schema from {database}")
+        if not self.list_schemas(database):
+            return False
+        
+        while True:
+            schema = input("\n💭 Enter schema name: ").strip().upper()
+            if schema:
+                break
+            print("❌ Schema name cannot be empty")
+        
+        # Step 4: Select Tables
+        print(f"\n📋 Step 4: Select Tables from {database}.{schema}")
+        if not self.list_tables(database, schema):
+            return False
+        
+        print("\n💭 Select tables (multiple options):")
+        print("   1. Enter table names manually (comma-separated)")
+        print("   2. Select all tables")
+        print("   3. Interactive selection")
+        
+        while True:
+            choice = input("\nChoose option (1/2/3): ").strip()
+            if choice in ['1', '2', '3']:
+                break
+            print("❌ Please enter 1, 2, or 3")
+        
+        selected_tables = []
+        
+        if choice == '1':
+            # Manual entry
+            while not selected_tables:
+                table_input = input("\n💭 Enter table names (comma-separated): ").strip()
+                if table_input:
+                    selected_tables = [t.strip().upper() for t in table_input.split(',')]
+                else:
+                    print("❌ Please enter at least one table name")
+        
+        elif choice == '2':
+            # Get all tables
+            response = self.make_request("GET", f"/connection/{self.connection_id}/tables", 
+                                       params={"database": database, "schema": schema})
+            if "error" not in response:
+                selected_tables = [table['table'] for table in response.get('tables', [])]
+                print(f"✅ Selected all {len(selected_tables)} tables")
+        
+        elif choice == '3':
+            # Interactive selection
+            response = self.make_request("GET", f"/connection/{self.connection_id}/tables", 
+                                       params={"database": database, "schema": schema})
+            if "error" not in response:
+                tables = response.get('tables', [])
+                print(f"\n📋 Available tables ({len(tables)}):")
+                for i, table in enumerate(tables, 1):
+                    print(f"   {i}. {table['table']} ({table['table_type']})")
+                
+                while not selected_tables:
+                    indices_input = input("\n💭 Enter table numbers (comma-separated, e.g., 1,3,5): ").strip()
+                    if indices_input:
+                        try:
+                            indices = [int(i.strip()) for i in indices_input.split(',')]
+                            selected_tables = [tables[i-1]['table'] for i in indices if 1 <= i <= len(tables)]
+                            if selected_tables:
+                                print(f"✅ Selected tables: {', '.join(selected_tables)}")
+                            else:
+                                print("❌ No valid tables selected")
+                        except (ValueError, IndexError):
+                            print("❌ Invalid input. Please enter valid numbers.")
+                    else:
+                        print("❌ Please enter at least one table number")
+        
+        if not selected_tables:
+            print("❌ No tables selected. Exiting.")
+            return False
+        
+        # Step 5: Analyze Tables
+        print(f"\n📋 Step 5: Analyzing {len(selected_tables)} Tables")
+        analysis_result = self.analyze_tables(selected_tables)
+        if not analysis_result:
+            return False
+        
+        # Step 6: Generate Data Dictionary
+        print(f"\n📋 Step 6: Generate Data Dictionary")
+        output_file = input(f"\n💭 Output file name [data_dictionary.yaml]: ").strip()
+        if not output_file:
+            output_file = "data_dictionary.yaml"
+        
+        dict_result = self.generate_data_dictionary(selected_tables, database, schema, output_file)
+        if not dict_result:
+            return False
+        
+        # Step 7: Upload to Stage (Optional)
+        print(f"\n📋 Step 7: Upload to Snowflake Stage (Optional)")
+        upload_choice = input("💭 Do you want to upload to a Snowflake stage? (y/N): ").strip().lower()
+        
+        if upload_choice in ['y', 'yes']:
+            stage_name = input("💭 Enter stage name (e.g., @DB.SCHEMA.STAGE): ").strip()
+            if stage_name:
+                stage_file = input(f"💭 File name in stage [{output_file}]: ").strip()
+                if not stage_file:
+                    stage_file = output_file
+                
+                yaml_content = dict_result.get("yaml_dictionary", "")
+                if yaml_content:
+                    if self.save_dictionary_to_stage(stage_name, stage_file, yaml_content):
+                        print(f"✅ Dictionary uploaded to {stage_name}/{stage_file}")
+                    else:
+                        print("❌ Failed to upload to stage")
+        
+        # Summary
+        print("\n" + "=" * 50)
+        print("🎉 Data Dictionary Creation Complete!")
+        print(f"   📊 Database: {database}")
+        print(f"   📂 Schema: {schema}")
+        print(f"   📋 Tables: {len(selected_tables)} ({', '.join(selected_tables)})")
+        print(f"   📄 Output File: {output_file}")
+        print(f"   ✅ Status: Success")
+        print("=" * 50)
+        
+        return True
 
 
 def main():
@@ -343,6 +489,19 @@ def main():
     workflow_parser.add_argument('database', help='Database name')
     workflow_parser.add_argument('schema', help='Schema name')
     workflow_parser.add_argument('tables', nargs='+', help='Table names to test')
+    
+    # Interactive workflow command (AWS CLI style)
+    interactive_parser = subparsers.add_parser('wizard', help='Interactive data dictionary creation wizard (AWS CLI style)')
+    
+    # Sequential workflow command (AWS CLI style)
+    seq_workflow_parser = subparsers.add_parser('create-dictionary', help='Create data dictionary - AWS CLI style workflow')
+    seq_workflow_parser.add_argument('--database', required=True, help='Database name')
+    seq_workflow_parser.add_argument('--schema', required=True, help='Schema name')
+    seq_workflow_parser.add_argument('--tables', nargs='+', help='Specific table names (optional - will prompt if not provided)')
+    seq_workflow_parser.add_argument('--output', '-o', default='data_dictionary.yaml', help='Output YAML file name')
+    seq_workflow_parser.add_argument('--stage', help='Snowflake stage to upload to (e.g., @DB.SCHEMA.STAGE)')
+    seq_workflow_parser.add_argument('--stage-file', help='File name in stage (defaults to output filename)')
+    seq_workflow_parser.add_argument('--interactive', '-i', action='store_true', help='Interactive table selection')
     
     args = parser.parse_args()
     
@@ -406,6 +565,10 @@ def main():
     
     elif args.command == 'disconnect':
         success = tester.disconnect()
+        return 0 if success else 1
+    
+    elif args.command == 'wizard':
+        success = tester.interactive_workflow()
         return 0 if success else 1
     
     elif args.command == 'test-workflow':

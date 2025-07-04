@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import yaml
 from typing import Dict, List, Optional, Any
 from fastapi import FastAPI, HTTPException, Body, Query, Path, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -544,17 +545,33 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
             try:
                 # Get table schema information
                 cursor = conn.cursor()
+                print(f"DEBUG: Getting schema for {full_table_name}")
                 cursor.execute(f"DESCRIBE TABLE {full_table_name}")
                 schema_info = cursor.fetchall()
+                print(f"DEBUG: Found {len(schema_info)} columns")
                 
                 # Get sample data
+                print(f"DEBUG: Getting sample data from {full_table_name}")
                 sample_sql = f"SELECT * FROM {full_table_name} LIMIT 10"
                 sample_df = pd.read_sql_query(sample_sql, conn)
+                print(f"DEBUG: Got {len(sample_df)} sample rows")
                 
                 # Get table statistics
+                print(f"DEBUG: Getting row count for {full_table_name}")
                 stats_sql = f"SELECT COUNT(*) as row_count FROM {full_table_name}"
                 stats_df = pd.read_sql_query(stats_sql, conn)
-                row_count = stats_df.iloc[0]['ROW_COUNT']
+                print(f"DEBUG: Stats columns: {list(stats_df.columns)}")
+                # Handle case sensitivity - try both uppercase and lowercase
+                if 'ROW_COUNT' in stats_df.columns:
+                    row_count_raw = stats_df.iloc[0]['ROW_COUNT']
+                elif 'row_count' in stats_df.columns:
+                    row_count_raw = stats_df.iloc[0]['row_count']
+                else:
+                    row_count_raw = stats_df.iloc[0, 0]  # First column
+                
+                # Convert numpy type to native Python int
+                row_count = int(row_count_raw) if pd.notna(row_count_raw) else 0
+                print(f"DEBUG: Row count: {row_count}")
                 
                 # Analyze each column
                 columns_info = []
@@ -566,6 +583,7 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
                     # Get column statistics if it's numeric
                     if 'NUMBER' in col_type.upper() or 'FLOAT' in col_type.upper():
                         try:
+                            print(f"DEBUG: Getting numeric stats for column {col_name}")
                             col_stats_sql = f"""
                             SELECT 
                                 MIN({col_name}) as min_val,
@@ -575,12 +593,17 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
                             FROM {full_table_name}
                             """
                             col_stats_df = pd.read_sql_query(col_stats_sql, conn)
-                            col_stats = col_stats_df.iloc[0].to_dict()
-                        except:
+                            col_stats_raw = col_stats_df.iloc[0].to_dict()
+                            # Convert numpy types to native Python types for JSON serialization
+                            col_stats = {k: float(v) if pd.notna(v) and str(type(v)).startswith('<class \'numpy.') else v for k, v in col_stats_raw.items()}
+                            print(f"DEBUG: Numeric stats for {col_name}: {col_stats}")
+                        except Exception as col_error:
+                            print(f"DEBUG: Error getting numeric stats for {col_name}: {col_error}")
                             col_stats = {}
                     else:
                         # For string columns, get distinct count and sample values
                         try:
+                            print(f"DEBUG: Getting string stats for column {col_name}")
                             col_stats_sql = f"""
                             SELECT 
                                 COUNT(DISTINCT {col_name}) as distinct_count,
@@ -588,25 +611,58 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
                             FROM {full_table_name}
                             """
                             col_stats_df = pd.read_sql_query(col_stats_sql, conn)
-                            col_stats = col_stats_df.iloc[0].to_dict()
-                        except:
+                            col_stats_raw = col_stats_df.iloc[0].to_dict()
+                            # Convert numpy types to native Python types for JSON serialization
+                            col_stats = {k: int(v) if pd.notna(v) and str(type(v)).startswith('<class \'numpy.') else v for k, v in col_stats_raw.items()}
+                            print(f"DEBUG: String stats for {col_name}: {col_stats}")
+                        except Exception as col_error:
+                            print(f"DEBUG: Error getting string stats for {col_name}: {col_error}")
                             col_stats = {}
+                    
+                    # Get sample values and convert numpy types
+                    if col_name in sample_df.columns:
+                        sample_values_raw = sample_df[col_name].head(5).tolist()
+                        sample_values = [
+                            float(v) if pd.notna(v) and str(type(v)).startswith('<class \'numpy.float') else
+                            int(v) if pd.notna(v) and str(type(v)).startswith('<class \'numpy.int') else
+                            str(v) if pd.notna(v) else None
+                            for v in sample_values_raw
+                        ]
+                    else:
+                        sample_values = []
                     
                     columns_info.append({
                         "name": col_name,
                         "type": col_type,
                         "nullable": col_nullable == "Y",
                         "statistics": col_stats,
-                        "sample_values": sample_df[col_name].head(5).tolist() if col_name in sample_df.columns else []
+                        "sample_values": sample_values
                     })
                 
                 cursor.close()
+                
+                # Convert sample data and handle numpy types
+                sample_data_raw = sample_df.head(5).to_dict(orient="records")
+                sample_data = []
+                for record in sample_data_raw:
+                    converted_record = {}
+                    for k, v in record.items():
+                        if pd.notna(v):
+                            if str(type(v)).startswith('<class \'numpy.float'):
+                                converted_record[k] = float(v)
+                            elif str(type(v)).startswith('<class \'numpy.int'):
+                                converted_record[k] = int(v)
+                            else:
+                                converted_record[k] = str(v)
+                        else:
+                            converted_record[k] = None
+                    sample_data.append(converted_record)
                 
                 table_analysis[table_name] = {
                     "full_name": full_table_name,
                     "row_count": row_count,
                     "columns": columns_info,
-                    "sample_data": sample_df.head(5).to_dict(orient="records")
+                    "sample_data": sample_data
                 }
                 
                 print(f"DEBUG: Successfully analyzed table {table_name} with {len(columns_info)} columns")
