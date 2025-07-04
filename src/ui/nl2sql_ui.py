@@ -69,6 +69,23 @@ def main():
     # Show title and clear cache in sidebar
     ui_components.show_title_and_clear_cache(cache_utils.clear_session_cache)
 
+    # --- Dataset selection UI ---
+    st.sidebar.header("Choose a dataset")
+    try:
+        resp = requests.get(f"{API_URL}/list-datasets/")
+        resp.raise_for_status()
+        datasets = resp.json().get("datasets", [])
+    except Exception as e:
+        datasets = []
+        st.sidebar.error(f"Could not fetch datasets: {e}")
+
+    selected_dataset = None
+    if datasets:
+        selected_dataset = st.sidebar.selectbox("Available datasets", datasets)
+        st.session_state['selected_dataset'] = selected_dataset
+    else:
+        st.sidebar.info("No datasets found. Upload a CSV to get started.")
+
     # Initialize session states
     if 'data_dict_ready' not in st.session_state:
         st.session_state['data_dict_ready'] = False
@@ -140,9 +157,14 @@ def main():
             print(f'cache miss for user query: {user_input} (normalized: {normalized_input})')
             try:
                 # Send query to API
+                # Use selected dataset as base_name if available
+                params = {"query": user_input}
+                base_name = st.session_state.get('selected_dataset')
+                if base_name:
+                    params["base_name"] = base_name
                 response = requests.post(
                     f"{API_URL}/query/",
-                    params={"query": user_input}
+                    params=params
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -163,37 +185,51 @@ def main():
         if sql_result:
             ui_components.show_sql_query(sql_result)
         
+            # Determine the base_name from the uploaded file (strip extension)
+            # Use selected dataset as base_name if available
+            base_name = st.session_state.get('selected_dataset')
+            if not base_name:
+                if uploaded_file is not None:
+                    base_name = os.path.splitext(uploaded_file.name)[0]
+                else:
+                    base_name = os.path.splitext(os.path.basename(sample_data_filename))[0]
+
+            # Call the backend API to execute the SQL
             try:
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                cursor.execute(sql_result)
-                query_result = cursor.fetchall()
-                columns = [desc[0] for desc in cursor.description]
-                df = pandas.DataFrame(query_result, columns=columns)
-                conn.close()
-                ui_components.show_query_result(df)
-            
-                # Convert DataFrame to JSON for API request
-                df_json = df.to_json(orient='records')
-                try:
-                    # Send DataFrame to API for summary generation
-                    response = requests.post(
-                        f"{API_URL}/generate-summary/",
-                        json={"data": df_json}
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-                    
-                    if result.get("status") == "success":
-                        summary = result.get("summary", "No summary available")
-                        ui_components.show_summary(summary)
-                    else:
-                        st.warning("Could not generate summary: " + result.get("detail", "Unknown error"))
-                except Exception as e:
-                    st.warning(f"Could not generate summary: {e}")
-                    # Continue execution even if summary fails
+                exec_response = requests.post(
+                    f"{API_URL}/execute-sql/",
+                    json={"sql": sql_result, "base_name": base_name}
+                )
+                exec_response.raise_for_status()
+                exec_result = exec_response.json()
+                if exec_result.get("status") == "success":
+                    columns = exec_result.get("columns", [])
+                    result = exec_result.get("result", [])
+                    df = pandas.DataFrame(result, columns=columns)
+                    ui_components.show_query_result(df)
+
+                    # Convert DataFrame to JSON for API request
+                    df_json = df.to_json(orient='records')
+                    try:
+                        # Send DataFrame to API for summary generation
+                        response = requests.post(
+                            f"{API_URL}/generate-summary/",
+                            json={"data": df_json}
+                        )
+                        response.raise_for_status()
+                        result = response.json()
+                        if result.get("status") == "success":
+                            summary = result.get("summary", "No summary available")
+                            ui_components.show_summary(summary)
+                        else:
+                            st.warning("Could not generate summary: " + result.get("detail", "Unknown error"))
+                    except Exception as e:
+                        st.warning(f"Could not generate summary: {e}")
+                        # Continue execution even if summary fails
+                else:
+                    st.error("SQL execution failed: " + exec_result.get("detail", "Unknown error"))
             except Exception as exp:
-                st.error(f"An error occurred: {exp}")
+                st.error(f"An error occurred during SQL execution: {exp}")
         # Clear the input
         #st.session_state.user_query = ""
         #st.session_state["user_query"] = ""

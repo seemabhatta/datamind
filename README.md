@@ -67,6 +67,17 @@ The application uses a YAML-based data dictionary (`data-dict2.yaml`) to underst
 streamlit run nl2sql-app.py
 ```
 
+or
+
+```bash
+uvicorn src.api.nl2sql_api:app --reload
+```
+and 
+
+```bash
+streamlit run src.ui.nl2sql_ui.py
+```
+
 ## Usage
 
 1. Start the application using the command above

@@ -5,8 +5,10 @@ import pathlib
 import sys
 from openai import OpenAI
 from dotenv import load_dotenv
-import pandas
+import pandas as pd
 import yaml
+from google.protobuf.json_format import ParseDict
+from utils.schema.semantic_model_pb2 import SemanticModel  
 
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
@@ -34,11 +36,12 @@ def call_response_api(llm_model, system_prompt, user_prompt):
 def load_prompt_file(file_path):
     try:
         # Use project root for system prompts
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        prompt_path = os.path.join(project_root, config.SYSTEM_PROMPTS_DIR, file_path) if not pathlib.Path(file_path).is_absolute() else pathlib.Path(file_path)
+        #project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        prompt_path = file_utils.resolve_prompt_path(config.SYSTEM_PROMPTS_DIR, file_path)
         with open(prompt_path, 'r', encoding='utf-8') as file:
             content = file.read()
         return content
+
     except FileNotFoundError:
         return f"Error: File not found at {prompt_path}"
     except Exception as e:
@@ -67,10 +70,11 @@ def classify_intent(user_input):
         return match.group(1)
     return intent_raw
 
-def create_nl2sqlchat_pompt(enriched_data_dict):
+def create_nl2sqlchat_pompt(enriched_data_dict, table_name):
     system_prompt_file_path = config.NL2SQL_SYSTEM_PROMPT_FILE
     system_prompt = load_prompt_file(system_prompt_file_path)
-    sample_data_path = file_utils.get_sample_data_path()
+    paths = file_utils.prepare_data_paths(table_name)
+    sample_data_path = paths["data_file"]
     try:
         with open(sample_data_path, "r", encoding="utf-8") as f:
             sample_data = f.read()
@@ -81,17 +85,17 @@ def create_nl2sqlchat_pompt(enriched_data_dict):
                 ## Database Dictionary -  
                 {enriched_data_dict}  
                 ## Table Name
-                {config.TABLE_NAME}
+                {table_name}
                 ## Sample Data
                 {sample_data}
             """
     return prompt
 
-def create_sql_from_nl(user_input, enriched_data_dict):
+def create_sql_from_nl(user_input, enriched_data_dict, table_name):
     """
     Generate SQL from user input and enriched data dictionary. No caching logic here.
     """
-    nl2sql_system_prompt = create_nl2sqlchat_pompt(enriched_data_dict)
+    nl2sql_system_prompt = create_nl2sqlchat_pompt(enriched_data_dict, table_name)
     nl2sql_user_prompt = f"Convert the following natural language question to SQL: {user_input}"
     response = call_response_api(llm_model, nl2sql_system_prompt, nl2sql_user_prompt)
     sql_result = response.choices[0].message.content
@@ -107,17 +111,15 @@ def create_summary(df):
     return summery
 
 
-def generate_enhanced_data_dictionary(sample_data_file):
+def generate_enhanced_data_dictionary(sample_data_path):
     """
-    Loads the sample_data_file (CSV) from the sample-data directory, loads the system prompt from enhancedDDSystemPrompt.txt,
+    Loads the sample_data_file (CSV), loads the system prompt from enhancedDDSystemPrompt.txt,
     and calls the LLM to generate an enhanced data dictionary. Returns the LLM's response as a string.
     Uses a more efficient prompt by sending only column names, types, and 2 sample values per column.
     """
-    # Always read sample data from the configured path
-    sample_data_path = file_utils.get_sample_data_path()
     print(f"Loading sample data from {sample_data_path}...")
     try:
-        df = pandas.read_csv(sample_data_path)
+        df = pd.read_csv(sample_data_path)
         print(f"Successfully loaded sample data from {sample_data_path} with {len(df)} rows and {len(df.columns)} columns")
     except Exception as e:
         print(f"Error loading sample data from CSV: {e}")
@@ -136,8 +138,7 @@ def generate_enhanced_data_dictionary(sample_data_file):
     )
 
     # Step 3: Load the system prompt from the txt file
-    system_prompt_path = os.path.join(
-        os.path.dirname(__file__),
+    system_prompt_path = file_utils.resolve_prompt_path(
         config.SYSTEM_PROMPTS_DIR,
         config.ENHANCED_DD_SYSTEM_PROMPT_FILE
     )
@@ -173,23 +174,54 @@ def generate_enhanced_data_dictionary(sample_data_file):
         print("No valid response from LLM.")
         return None
 
-def save_enhanced_data_dictionary_to_yaml_file(sample_data_file):
+def validate_semantic_model(yaml_str):
     """
-    Generates the enhanced data dictionary and writes it to the configured YAML file in YAML format.
-    If the file does not exist, it will be created. If it exists, it will be overwritten.
-    Also prints the YAML content for debugging.
+    Validates a YAML string against the SemanticModel protobuf schema.
     """
-    yaml_text = generate_enhanced_data_dictionary(sample_data_file)
-    if yaml_text is None:
-        print("Failed to generate YAML data dictionary.")
-        return
-
-    # Save to project root directory
-    output_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), config.DATA_DICT_FILENAME)
     try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(yaml_text)
-        print(f"YAML data dictionary saved to {output_path}")
-        print("First 500 characters of YAML:\n", yaml_text[:500])
+        is_valid, error = validate_yaml_with_proto(yaml_str)
+        if is_valid:
+            return {"status": "success", "message": "YAML is valid against the schema."}
+        else:
+            return {"status": "error", "message": error}
     except Exception as e:
-        print(f"Error writing YAML file: {e}")
+        raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
+
+
+import datetime
+
+def convert_dates_to_strings(obj):
+    if isinstance(obj, dict):
+        return {k: convert_dates_to_strings(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_dates_to_strings(i) for i in obj]
+    elif isinstance(obj, (datetime.date, datetime.datetime)):
+        return obj.isoformat()
+    else:
+        return obj
+
+def convert_sample_values_to_strings(data):
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k == "sampleValues" and isinstance(v, list):
+                data[k] = [str(item) for item in v]
+            else:
+                convert_sample_values_to_strings(v)
+    elif isinstance(data, list):
+        for item in data:
+            convert_sample_values_to_strings(item)
+    return data
+def validate_yaml_with_proto(yaml_str):
+    """
+    Validates a YAML string against the SemanticModel protobuf schema.
+    Returns (True, None) if valid, (False, error_message) if not.
+    """
+    try:
+        data = yaml.safe_load(yaml_str)
+        data = convert_dates_to_strings(data)
+        data = convert_sample_values_to_strings(data)
+        # Convert YAML dict to protobuf
+        ParseDict(data, SemanticModel())
+        return True, None
+    except Exception as e:
+        return False, str(e)
