@@ -304,37 +304,125 @@ async def load_stage_file(
 
 @app.post("/connection/{connection_id}/query")
 async def process_nl_query(connection_id: str, request: QueryRequest):
-    """Process natural language query and return SQL + results"""
+    """Process natural language query using NL2SQL and execute on Snowflake"""
     if connection_id not in snowflake_connections:
         raise HTTPException(status_code=404, detail="Connection not found")
     
     try:
-        # Classify intent
+        # Step 1: Classify intent using existing LLM utility
         intent = llm_util.classify_intent(request.query)
         
         if intent.strip() != "SQL_QUERY":
-            return {"status": "success", "intent": intent, "message": "Non-SQL query detected"}
+            return {
+                "status": "success", 
+                "intent": intent, 
+                "message": "Non-SQL query detected",
+                "query": request.query
+            }
         
-        # Generate SQL using dictionary if provided
+        # Step 2: Generate SQL using existing NL2SQL function
         if request.dictionary_content:
-            sql_result = llm_util.create_sql_from_nl(
+            # Debug logging
+            print(f"DEBUG: Processing query: {request.query}")
+            print(f"DEBUG: Table name: {request.table_name}")
+            print(f"DEBUG: Dictionary length: {len(request.dictionary_content)} characters")
+            
+            # Use provided dictionary for SQL generation
+            generated_sql = llm_util.create_sql_from_nl(
                 request.query, 
                 request.dictionary_content, 
                 request.table_name
             )
+            
+            print(f"DEBUG: Generated SQL: {generated_sql}")
         else:
-            # Basic SQL generation without dictionary
-            sql_result = f"-- Generated SQL for: {request.query}\n-- Table: {request.table_name}\n-- Add your SQL here"
+            # No dictionary provided - throw error
+            raise HTTPException(
+                status_code=400, 
+                detail="Data dictionary is required for NL2SQL processing. Please load a dictionary file from the stage first."
+            )
         
-        return {
-            "status": "success",
-            "intent": intent,
-            "sql": sql_result,
-            "table_name": request.table_name
-        }
+        # Step 3: Clean and validate the generated SQL
+        sql_cleaned = generated_sql.strip()
+        
+        # Remove markdown code blocks if present
+        if sql_cleaned.startswith("```sql"):
+            sql_cleaned = sql_cleaned[6:]
+        if sql_cleaned.startswith("```"):
+            sql_cleaned = sql_cleaned[3:]
+        if sql_cleaned.endswith("```"):
+            sql_cleaned = sql_cleaned[:-3]
+        
+        sql_cleaned = sql_cleaned.strip()
+        
+        # Step 4: Execute the generated SQL on Snowflake
+        conn = snowflake_connections[connection_id]["connection"]
+        
+        try:
+            # Add reasonable limit if not present
+            if "LIMIT" not in sql_cleaned.upper():
+                sql_cleaned = f"{sql_cleaned.rstrip(';')} LIMIT 100"
+            
+            # Execute on Snowflake
+            df = pd.read_sql_query(sql_cleaned, conn)
+            
+            # Convert results to JSON
+            result = df.to_dict(orient="records")
+            columns = list(df.columns)
+            
+            return {
+                "status": "success",
+                "intent": intent,
+                "query": request.query,
+                "sql": sql_cleaned,
+                "table_name": request.table_name,
+                "execution_status": "success",
+                "columns": columns,
+                "result": result,
+                "row_count": len(result),
+                "message": f"Successfully executed query and returned {len(result)} rows"
+            }
+            
+        except Exception as sql_error:
+            # SQL execution failed, return SQL but with error
+            return {
+                "status": "partial_success",
+                "intent": intent,
+                "query": request.query,
+                "sql": sql_cleaned,
+                "table_name": request.table_name,
+                "execution_status": "failed",
+                "sql_error": str(sql_error),
+                "message": "Generated SQL but execution failed. Please review the SQL."
+            }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing NL2SQL query: {str(e)}")
+
+@app.post("/connection/{connection_id}/nl2sql-execute")
+async def nl2sql_and_execute(connection_id: str, request: QueryRequest):
+    """Complete NL2SQL pipeline: Process natural language → Generate SQL → Execute → Return results"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        # Use the existing query endpoint to process NL2SQL
+        query_result = await process_nl_query(connection_id, request)
+        
+        # If SQL was successfully generated and executed, return the complete result
+        if query_result.get("execution_status") == "success":
+            return query_result
+        
+        # If SQL was generated but execution failed, return the error
+        elif query_result.get("execution_status") == "failed":
+            return query_result
+            
+        # If it's not a SQL query, return the classification result
+        else:
+            return query_result
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in NL2SQL pipeline: {str(e)}")
 
 @app.post("/connection/{connection_id}/execute-sql")
 async def execute_sql(
