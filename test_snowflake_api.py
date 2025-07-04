@@ -89,8 +89,9 @@ class SnowflakeAPITester:
     def list_databases(self) -> bool:
         """List available databases"""
         if not self.connection_id:
-            print("❌ No active connection")
-            return False
+            print("No connection found. Attempting to connect...")
+            if not self.connect():
+                return False
         
         print("📋 Listing databases...")
         response = self.make_request("GET", f"/connection/{self.connection_id}/databases")
@@ -107,8 +108,9 @@ class SnowflakeAPITester:
     def list_schemas(self, database: str) -> bool:
         """List schemas in a database"""
         if not self.connection_id:
-            print("❌ No active connection")
-            return False
+            print("No connection found. Attempting to connect...")
+            if not self.connect():
+                return False
         
         print(f"📋 Listing schemas in {database}...")
         response = self.make_request("GET", f"/connection/{self.connection_id}/schemas", params={"database": database})
@@ -125,8 +127,9 @@ class SnowflakeAPITester:
     def list_tables(self, database: str, schema: str) -> bool:
         """List tables in a schema"""
         if not self.connection_id:
-            print("❌ No active connection")
-            return False
+            print("No connection found. Attempting to connect...")
+            if not self.connect():
+                return False
         
         print(f"📋 Listing tables in {database}.{schema}...")
         response = self.make_request("GET", f"/connection/{self.connection_id}/tables", 
