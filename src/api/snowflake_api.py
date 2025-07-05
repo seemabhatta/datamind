@@ -291,11 +291,10 @@ async def load_stage_file(
         
         print(f"DEBUG: Loading stage file {file_name} from {stage_name}")
         
-        # Read file content directly from stage using SELECT
+        # Read file content directly from stage as plain text
         select_sql = f"""
         SELECT $1 as content 
         FROM '{stage_name}/{file_name}'
-        (FILE_FORMAT => (TYPE='CSV' FIELD_DELIMITER=NONE RECORD_DELIMITER='\\n' SKIP_HEADER=0))
         """
         
         cursor.execute(select_sql)

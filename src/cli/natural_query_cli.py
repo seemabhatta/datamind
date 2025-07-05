@@ -7,6 +7,7 @@ import click
 import requests
 import json
 import sys
+import yaml
 
 BASE_URL = "http://localhost:8001"
 
@@ -166,30 +167,186 @@ def workflow():
         filename = file["name"].split('/')[-1] if '/' in file["name"] else file["name"]
         click.echo(f"  {i}. {filename} ({file['size']} bytes)")
     
-    while True:
-        try:
-            choice = click.prompt("\nSelect YAML file number", type=int)
-            if 1 <= choice <= len(yaml_files):
-                selected_file = yaml_files[choice - 1]
-                break
-            else:
-                click.echo("❌ Invalid choice. Please try again.")
-        except (ValueError, click.Abort):
-            click.echo("❌ Invalid input. Please enter a number.")
+    # Step 2: Load and Parse YAML (with retry loop)
+    click.echo(f"\n📋 Step 2: Loading and Parsing YAML File")
     
-    selected_filename = selected_file["name"].split('/')[-1] if '/' in selected_file["name"] else selected_file["name"]
-    click.echo(f"Selected YAML file: {selected_filename}")
+    yaml_data = None
+    yaml_content = None
+    selected_filename = None
+    
+    while yaml_data is None:
+        # File selection
+        while True:
+            try:
+                choice = click.prompt("\nSelect YAML file number (or 'q' to quit)", type=str)
+                if choice.lower() == 'q':
+                    click.echo("👋 Goodbye!")
+                    return
+                
+                choice_int = int(choice)
+                if 1 <= choice_int <= len(yaml_files):
+                    selected_file = yaml_files[choice_int - 1]
+                    selected_filename = selected_file["name"].split('/')[-1] if '/' in selected_file["name"] else selected_file["name"]
+                    break
+                else:
+                    click.echo("❌ Invalid choice. Please try again.")
+            except ValueError:
+                click.echo("❌ Invalid input. Please enter a number or 'q' to quit.")
+            except click.Abort:
+                click.echo("\n👋 Goodbye!")
+                return
+        
+        click.echo(f"Selected YAML file: {selected_filename}")
+        
+        # Load YAML content from stage
+        click.echo(f"📄 Loading {selected_filename} from stage...")
+        yaml_result = client.get(f"/connection/{client.connection_id}/load-stage-file", 
+                               params={"stage_name": stage_name, "file_name": selected_filename})
+        
+        if "content" not in yaml_result:
+            click.echo(f"❌ Failed to load YAML content: {yaml_result}")
+            retry = click.confirm("💭 Try a different file?", default=True)
+            if not retry:
+                return
+            continue
+        
+        yaml_content = yaml_result["content"]
+        click.echo(f"✅ Loaded YAML content ({len(yaml_content)} characters)")
+        
+        # Parse YAML
+        try:
+            yaml_data = yaml.safe_load(yaml_content)
+            click.echo("✅ YAML parsed successfully")
+        except yaml.YAMLError as e:
+            click.echo(f"❌ Failed to parse YAML: {e}")
+            retry = click.confirm("💭 Try a different file?", default=True)
+            if not retry:
+                return
+            # Continue loop to select another file
+    
+    # Extract database and schema information from YAML
+    click.echo("\n🔍 Extracting database and schema information...")
+    
+    databases_found = set()
+    schemas_found = set()
+    tables_found = []
+    
+    if "tables" in yaml_data:
+        for table in yaml_data["tables"]:
+            if "base_table" in table:
+                base_table = table["base_table"]
+                if "database" in base_table:
+                    databases_found.add(base_table["database"])
+                if "schema" in base_table:
+                    schemas_found.add(base_table["schema"])
+                
+                # Store table info for validation later
+                tables_found.append({
+                    "name": table.get("name", "Unknown"),
+                    "database": base_table.get("database", ""),
+                    "schema": base_table.get("schema", ""),
+                    "full_name": f"{base_table.get('database', '')}.{base_table.get('schema', '')}.{table.get('name', '')}"
+                })
+    
+    if not databases_found or not schemas_found:
+        click.echo("❌ Could not extract database/schema information from YAML")
+        click.echo("Expected YAML structure: tables[].base_table.{database, schema}")
+        return
+    
+    # Display found information
+    click.echo(f"📊 Found {len(databases_found)} database(s): {', '.join(databases_found)}")
+    click.echo(f"📂 Found {len(schemas_found)} schema(s): {', '.join(schemas_found)}")
+    click.echo(f"📋 Found {len(tables_found)} table(s):")
+    for table in tables_found:
+        click.echo(f"  - {table['name']} ({table['full_name']})")
+    
+    # Store parsed data for next steps
+    yaml_context = {
+        "content": yaml_content,
+        "data": yaml_data,
+        "databases": list(databases_found),
+        "schemas": list(schemas_found),
+        "tables": tables_found,
+        "stage_database": selected_database,
+        "stage_schema": selected_schema,
+        "stage_name": stage_name,
+        "filename": selected_filename
+    }
+    
+    # Step 3: Database/Schema Confirmation
+    click.echo(f"\n📋 Step 3: Database/Schema Confirmation")
+    click.echo("🔍 The YAML file contains references to the following:")
+    click.echo(f"🗄️  Database(s): {', '.join(databases_found)}")
+    click.echo(f"📂 Schema(s): {', '.join(schemas_found)}")
+    click.echo(f"📋 Table(s): {len(tables_found)} tables")
+    for table in tables_found:
+        click.echo(f"   - {table['name']} ({table['full_name']})")
+    
+    click.echo(f"\n💭 We will use this database and schema for querying:")
+    
+    # Handle multiple databases/schemas (though usually should be one)
+    if len(databases_found) > 1:
+        click.echo(f"⚠️  Multiple databases found: {', '.join(databases_found)}")
+        click.echo("Please select which database to use:")
+        for i, db in enumerate(databases_found, 1):
+            click.echo(f"  {i}. {db}")
+        
+        while True:
+            try:
+                choice = click.prompt("Select database number", type=int)
+                if 1 <= choice <= len(databases_found):
+                    target_database = databases_found[choice - 1]
+                    break
+                else:
+                    click.echo("❌ Invalid choice. Please try again.")
+            except (ValueError, click.Abort):
+                click.echo("❌ Invalid input. Please enter a number.")
+    else:
+        target_database = databases_found[0]
+    
+    if len(schemas_found) > 1:
+        click.echo(f"⚠️  Multiple schemas found: {', '.join(schemas_found)}")
+        click.echo("Please select which schema to use:")
+        for i, schema in enumerate(schemas_found, 1):
+            click.echo(f"  {i}. {schema}")
+        
+        while True:
+            try:
+                choice = click.prompt("Select schema number", type=int)
+                if 1 <= choice <= len(schemas_found):
+                    target_schema = schemas_found[choice - 1]
+                    break
+                else:
+                    click.echo("❌ Invalid choice. Please try again.")
+            except (ValueError, click.Abort):
+                click.echo("❌ Invalid input. Please enter a number.")
+    else:
+        target_schema = schemas_found[0]
+    
+    click.echo(f"\n🎯 Target Context:")
+    click.echo(f"   🗄️  Database: {target_database}")
+    click.echo(f"   📂 Schema: {target_schema}")
+    
+    # Confirmation
+    proceed = click.confirm(f"\n💭 Do you want to proceed with database '{target_database}' and schema '{target_schema}'?", default=True)
+    if not proceed:
+        click.echo("👋 Operation cancelled. Goodbye!")
+        return
+    
+    # Update yaml_context with confirmed targets
+    yaml_context["target_database"] = target_database
+    yaml_context["target_schema"] = target_schema
     
     # Summary
     click.echo("\n" + "=" * 50)
-    click.echo("🎉 Step 1 Complete!")
+    click.echo("🎉 Step 3 Complete!")
     click.echo(f"📊 Account: {result['account']}")
     click.echo(f"👤 User: {result['user']}")
     click.echo(f"🔗 Connection: {result['connection_id'][:8]}...")
-    click.echo(f"🗄️ Database: {selected_database}")
-    click.echo(f"📂 Schema: {selected_schema}")
-    click.echo(f"🏪 Stage: {selected_stage['name']}")
     click.echo(f"📄 YAML File: {selected_filename}")
+    click.echo(f"🗄️ Target Database: {target_database}")
+    click.echo(f"📂 Target Schema: {target_schema}")
+    click.echo(f"📋 Tables: {len(tables_found)} tables")
     click.echo("✅ Ready for next step!")
     click.echo("=" * 50)
 
