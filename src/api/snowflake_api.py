@@ -719,13 +719,16 @@ async def generate_data_dictionary(connection_id: str, request: DataDictionaryRe
             table_prompt_info += f"Row Count: {table_info.get('row_count', 'Unknown')}\n"
             table_prompt_info += "Columns:\n"
             
-            for col in table_info.get("columns", []):
+            columns_list = table_info.get("columns", [])
+            table_prompt_info += f"Total Columns: {len(columns_list)}\n"
+            
+            for i, col in enumerate(columns_list, 1):
                 col_name = col["name"]
                 col_type = col["type"]
                 nullable = "nullable" if col["nullable"] else "not null"
                 sample_values = col.get("sample_values", [])[:3]  # First 3 sample values
                 
-                table_prompt_info += f"  - {col_name} ({col_type}, {nullable})"
+                table_prompt_info += f"  {i}. {col_name} ({col_type}, {nullable})"
                 if sample_values:
                     table_prompt_info += f" - samples: {sample_values}"
                 table_prompt_info += "\n"
@@ -770,16 +773,22 @@ tables:
         default_aggregation: "sum"
         sampleValues: ["123", "456"]
 
-IMPORTANT RULES:
-1. Use "dimensions" for non-numeric columns (text, dates, identifiers)
-2. Use "measures" for numeric columns that can be aggregated
-3. Set dataType to: varchar, number, date, timestamp, boolean, etc.
-4. Include all {len(all_tables_info)} tables
-5. Use the exact field names: name, description, expr, dataType, unique, sampleValues
-6. Do NOT use "category" or "fields" - they are not valid
-7. ALWAYS use database: "{request.database_name}" and schema: "{request.schema_name}" for ALL tables
+CRITICAL REQUIREMENTS:
+1. Include ALL {len(all_tables_info)} tables listed above
+2. For each table, include EVERY SINGLE COLUMN listed (do not skip any columns)
+3. Use "dimensions" for non-numeric columns (varchar, text, date, timestamp, boolean, etc.)
+4. Use "measures" for numeric columns that can be aggregated (number, integer, float, decimal)
+5. Set dataType to: varchar, number, date, timestamp, boolean, etc. (based on the column type shown)
+6. Use the exact field names: name, description, expr, dataType, unique, sampleValues
+7. Do NOT use "category" or "fields" - they are not valid
+8. ALWAYS use database: "{request.database_name}" and schema: "{request.schema_name}" for ALL tables
+9. The "expr" field should always be the same as the column name
+10. Include sample values from the data provided
 
-Please ensure all {len(all_tables_info)} tables are included in the YAML output with the correct database and schema names.
+VERIFICATION CHECKLIST - Ensure your YAML includes:
+- All {len(all_tables_info)} tables
+- Every column from each table (check the "Total Columns" count for each table)
+- Proper categorization as dimensions or measures based on data type
 """
             
             print(f"DEBUG: Generating YAML for {len(all_tables_info)} tables using direct LLM call")
@@ -796,6 +805,45 @@ Please ensure all {len(all_tables_info)} tables are included in the YAML output 
             if yaml_text.endswith("```"):
                 yaml_text = yaml_text[:-3]
             yaml_text = yaml_text.strip()
+            
+            # Verify that all columns are included in the generated YAML
+            try:
+                parsed_yaml = yaml.safe_load(yaml_text)
+                verification_results = []
+                
+                for table_name, table_info in table_analysis.items():
+                    if "error" in table_info:
+                        continue
+                    
+                    expected_columns = [col["name"] for col in table_info.get("columns", [])]
+                    
+                    # Find this table in the generated YAML
+                    yaml_table = None
+                    for yaml_tbl in parsed_yaml.get("tables", []):
+                        if yaml_tbl.get("name") == table_name:
+                            yaml_table = yaml_tbl
+                            break
+                    
+                    if yaml_table:
+                        # Collect all column names from dimensions and measures
+                        yaml_columns = []
+                        yaml_columns.extend([dim.get("name") for dim in yaml_table.get("dimensions", [])])
+                        yaml_columns.extend([meas.get("name") for meas in yaml_table.get("measures", [])])
+                        
+                        missing_columns = [col for col in expected_columns if col not in yaml_columns]
+                        if missing_columns:
+                            verification_results.append(f"Table {table_name}: Missing columns {missing_columns}")
+                        else:
+                            verification_results.append(f"Table {table_name}: ✓ All {len(expected_columns)} columns included")
+                    else:
+                        verification_results.append(f"Table {table_name}: ❌ Table not found in YAML")
+                
+                print("DEBUG: Column verification results:")
+                for result in verification_results:
+                    print(f"  {result}")
+                    
+            except Exception as verify_error:
+                print(f"DEBUG: Could not verify column completeness: {verify_error}")
             
             # Validate YAML against protobuf schema
             is_valid, error = llm_util.validate_yaml_with_proto(yaml_text)
