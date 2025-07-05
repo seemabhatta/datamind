@@ -284,48 +284,55 @@ def workflow():
     
     click.echo(f"\n💭 We will use this database and schema for querying:")
     
+    # Convert sets to lists for indexing
+    databases_list = list(databases_found)
+    schemas_list = list(schemas_found)
+    
     # Handle multiple databases/schemas (though usually should be one)
-    if len(databases_found) > 1:
-        click.echo(f"⚠️  Multiple databases found: {', '.join(databases_found)}")
+    if len(databases_list) > 1:
+        click.echo(f"⚠️  Multiple databases found: {', '.join(databases_list)}")
         click.echo("Please select which database to use:")
-        for i, db in enumerate(databases_found, 1):
+        for i, db in enumerate(databases_list, 1):
             click.echo(f"  {i}. {db}")
         
         while True:
             try:
                 choice = click.prompt("Select database number", type=int)
-                if 1 <= choice <= len(databases_found):
-                    target_database = databases_found[choice - 1]
+                if 1 <= choice <= len(databases_list):
+                    target_database = databases_list[choice - 1]
                     break
                 else:
                     click.echo("❌ Invalid choice. Please try again.")
             except (ValueError, click.Abort):
                 click.echo("❌ Invalid input. Please enter a number.")
     else:
-        target_database = databases_found[0]
+        target_database = databases_list[0]
     
-    if len(schemas_found) > 1:
-        click.echo(f"⚠️  Multiple schemas found: {', '.join(schemas_found)}")
+    if len(schemas_list) > 1:
+        click.echo(f"⚠️  Multiple schemas found: {', '.join(schemas_list)}")
         click.echo("Please select which schema to use:")
-        for i, schema in enumerate(schemas_found, 1):
+        for i, schema in enumerate(schemas_list, 1):
             click.echo(f"  {i}. {schema}")
         
         while True:
             try:
                 choice = click.prompt("Select schema number", type=int)
-                if 1 <= choice <= len(schemas_found):
-                    target_schema = schemas_found[choice - 1]
+                if 1 <= choice <= len(schemas_list):
+                    target_schema = schemas_list[choice - 1]
                     break
                 else:
                     click.echo("❌ Invalid choice. Please try again.")
             except (ValueError, click.Abort):
                 click.echo("❌ Invalid input. Please enter a number.")
     else:
-        target_schema = schemas_found[0]
+        target_schema = schemas_list[0]
     
     click.echo(f"\n🎯 Target Context:")
     click.echo(f"   🗄️  Database: {target_database}")
     click.echo(f"   📂 Schema: {target_schema}")
+    click.echo(f"   📋 Tables: {len(tables_found)} table(s)")
+    for table in tables_found:
+        click.echo(f"      - {table['name']}")
     
     # Confirmation
     proceed = click.confirm(f"\n💭 Do you want to proceed with database '{target_database}' and schema '{target_schema}'?", default=True)
