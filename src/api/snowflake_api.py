@@ -956,6 +956,175 @@ async def save_dictionary_to_stage(connection_id: str, request: SaveDictionaryRe
         print(f"DEBUG: Error saving dictionary to stage: {e}")
         raise HTTPException(status_code=500, detail=f"Error saving dictionary to stage: {str(e)}")
 
+@app.post("/connection/{connection_id}/generate-sql")
+async def generate_sql_only(connection_id: str, request: QueryRequest):
+    """Generate SQL from natural language query without executing it"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        # Step 1: Classify intent
+        intent = llm_util.classify_intent(request.query)
+        
+        if intent.strip() != "SQL_QUERY":
+            return {
+                "status": "success", 
+                "intent": intent, 
+                "message": "Non-SQL query detected",
+                "query": request.query
+            }
+        
+        # Step 2: Generate SQL only (no execution)
+        if not request.dictionary_content:
+            raise HTTPException(status_code=400, detail="Dictionary content is required for SQL generation")
+        
+        # Get connection for sample data
+        conn = snowflake_connections[connection_id]["connection"]
+        conn_details = snowflake_connections[connection_id]
+        database = conn_details.get("database", "")
+        schema = conn_details.get("schema", "")
+        
+        # Construct full table name if needed
+        if "." not in request.table_name and database and schema:
+            full_table_name = f"{database}.{schema}.{request.table_name}"
+        else:
+            full_table_name = request.table_name
+        
+        # Create enriched prompt with sample data
+        try:
+            system_prompt_file_path = "nl2sqlSystemPrompt.txt"
+            system_prompt = llm_util.load_prompt_file(system_prompt_file_path)
+            
+            # Get sample data from Snowflake table
+            sample_sql = f"SELECT * FROM {full_table_name} LIMIT 5"
+            sample_df = pd.read_sql_query(sample_sql, conn)
+            sample_data = sample_df.to_string(max_rows=5)
+            
+            # Build comprehensive prompt
+            enriched_prompt = f"""
+            {system_prompt}
+            ## Database Dictionary -  
+            {request.dictionary_content}  
+            ## Table Name
+            {full_table_name}
+            ## Sample Data
+            {sample_data}
+            """
+            
+            # Call LLM with enriched prompt
+            nl2sql_user_prompt = f"Convert the following natural language question to SQL: {request.query}"
+            response = llm_util.call_response_api(llm_util.llm_model, enriched_prompt, nl2sql_user_prompt)
+            generated_sql = response.choices[0].message.content
+            
+        except Exception as sample_error:
+            print(f"DEBUG: Could not get sample data: {sample_error}")
+            # Fallback to basic dictionary without sample data
+            generated_sql = llm_util.create_sql_from_nl(
+                request.query, 
+                request.dictionary_content, 
+                request.table_name
+            )
+        
+        # Clean up SQL (remove markdown, etc.)
+        import re
+        sql_clean = re.sub(r'```sql\s*', '', generated_sql)
+        sql_clean = re.sub(r'```\s*', '', sql_clean)
+        sql_clean = sql_clean.strip()
+        
+        # Add LIMIT if not present
+        if "LIMIT" not in sql_clean.upper():
+            sql_clean += " LIMIT 100"
+        
+        return {
+            "status": "success",
+            "intent": intent,
+            "query": request.query,
+            "sql": sql_clean,
+            "table_name": request.table_name,
+            "full_table_name": full_table_name
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Error generating SQL: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating SQL: {str(e)}")
+
+class ExecuteSQLRequest(BaseModel):
+    connection_id: str
+    sql: str
+    table_name: Optional[str] = None
+
+@app.post("/connection/{connection_id}/execute-sql")
+async def execute_sql_only(connection_id: str, request: ExecuteSQLRequest):
+    """Execute a SQL query on Snowflake and return results"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        conn = snowflake_connections[connection_id]["connection"]
+        
+        print(f"DEBUG: Executing SQL: {request.sql}")
+        
+        # Execute SQL using pandas
+        df = pd.read_sql_query(request.sql, conn)
+        
+        # Convert to JSON-serializable format
+        result = df.to_dict(orient="records")
+        columns = list(df.columns)
+        row_count = len(df)
+        
+        print(f"DEBUG: SQL executed successfully, returned {row_count} rows")
+        
+        return {
+            "status": "success",
+            "sql": request.sql,
+            "execution_status": "success",
+            "columns": columns,
+            "result": result,
+            "row_count": row_count,
+            "message": f"Successfully executed query and returned {row_count} rows"
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: SQL execution error: {e}")
+        return {
+            "status": "error",
+            "sql": request.sql,
+            "execution_status": "failed",
+            "sql_error": str(e),
+            "message": "SQL execution failed. Please review the SQL."
+        }
+
+class SummaryRequest(BaseModel):
+    connection_id: str
+    query: str
+    sql: str
+    results: List[Dict[str, Any]]
+
+@app.post("/connection/{connection_id}/generate-summary")
+async def generate_query_summary(connection_id: str, request: SummaryRequest):
+    """Generate AI summary of query results"""
+    if connection_id not in snowflake_connections:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    
+    try:
+        # Convert results back to DataFrame for summary generation
+        df = pd.DataFrame(request.results)
+        
+        # Generate summary using existing LLM utility
+        summary = llm_util.create_summary(df)
+        
+        return {
+            "status": "success",
+            "query": request.query,
+            "sql": request.sql,
+            "summary": summary,
+            "row_count": len(request.results)
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Error generating summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
+
 @app.delete("/connection/{connection_id}")
 async def disconnect(connection_id: str):
     """Close Snowflake connection"""
