@@ -911,45 +911,47 @@ async def save_dictionary_to_stage(connection_id: str, request: SaveDictionaryRe
         conn = snowflake_connections[connection_id]["connection"]
         cursor = conn.cursor()
         
-        # Create a temporary table to hold the YAML content
-        temp_table = f"temp_yaml_save_{uuid.uuid4().hex[:8]}"
+        # Write YAML content to a temporary local file with the desired name
+        import tempfile
+        import os
         
-        # Create temporary table with the YAML content
-        cursor.execute(f"""
-            CREATE OR REPLACE TEMPORARY TABLE {temp_table} (
-                content STRING
-            )
-        """)
+        # Create temp file with the desired filename
+        temp_dir = tempfile.gettempdir()
+        temp_file_path = os.path.join(temp_dir, request.file_name)
         
-        # Insert YAML content line by line
-        yaml_lines = request.yaml_content.split('\n')
-        for line in yaml_lines:
-            # Escape single quotes in the content
-            escaped_line = line.replace("'", "''")
-            cursor.execute(f"INSERT INTO {temp_table} VALUES ('{escaped_line}')")
+        with open(temp_file_path, 'w') as temp_file:
+            temp_file.write(request.yaml_content)
         
-        # Copy from temp table to stage
-        copy_sql = f"""
-            COPY INTO '{request.stage_name}/{request.file_name}'
-            FROM (SELECT content FROM {temp_table})
-            FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '|' RECORD_DELIMITER = '\\n' SKIP_HEADER = FALSE)
-            OVERWRITE = TRUE
-            SINGLE = TRUE
-        """
-        
-        cursor.execute(copy_sql)
-        
-        # Clean up temp table
-        cursor.execute(f"DROP TABLE {temp_table}")
-        cursor.close()
-        
-        return {
-            "status": "success",
-            "message": f"YAML dictionary saved to {request.stage_name}/{request.file_name}",
-            "stage_name": request.stage_name,
-            "file_name": request.file_name,
-            "content_size": len(request.yaml_content)
-        }
+        try:
+            # Use Snowflake's PUT command to upload the file to the stage
+            # Convert Windows path to proper format and escape backslashes
+            normalized_path = temp_file_path.replace('\\', '/')
+            put_command = f"PUT 'file://{normalized_path}' {request.stage_name} OVERWRITE=TRUE AUTO_COMPRESS=FALSE"
+            print(f"DEBUG: Executing PUT command: {put_command}")
+            cursor.execute(put_command)
+            
+            # Since we created the temp file with the desired name, it should upload with the correct name
+            actual_filename = request.file_name
+            
+            # Verify the upload by listing the stage
+            cursor.execute(f"LIST {request.stage_name}")
+            files = cursor.fetchall()
+            print(f"DEBUG: Files in stage after upload: {[f[0] for f in files]}")
+            
+            cursor.close()
+            
+            return {
+                "status": "success", 
+                "message": f"YAML dictionary uploaded to {request.stage_name}/{actual_filename}",
+                "stage_name": request.stage_name,
+                "file_name": actual_filename,
+                "content_size": len(request.yaml_content)
+            }
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
         
     except Exception as e:
         print(f"DEBUG: Error saving dictionary to stage: {e}")

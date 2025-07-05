@@ -281,13 +281,104 @@ def workflow(database, schema, tables):
         with open(output_file, 'w') as f:
             f.write(result["yaml_dictionary"])
         
+        # Step 6: Optional Upload to Snowflake Stage
+        click.echo(f"\n📋 Step 6: Upload to Snowflake Stage (Optional)")
+        upload_to_stage = click.confirm("💭 Do you want to upload the YAML to a Snowflake stage?", default=False)
+        
+        if upload_to_stage:
+            # List available stages in the current schema
+            click.echo(f"🔍 Finding stages in {database}.{schema}...")
+            stages_result = client.get(f"/connection/{client.connection_id}/stages", 
+                                     params={"database": database, "schema": schema})
+            
+            if "stages" in stages_result and stages_result["stages"]:
+                available_stages = stages_result["stages"]
+                click.echo(f"Available stages in {database}.{schema}:")
+                for i, stage in enumerate(available_stages, 1):
+                    click.echo(f"  {i}. {stage['name']} ({stage['type']})")
+                
+                # Let user select a stage
+                while True:
+                    try:
+                        choice = click.prompt("\n💭 Select stage number", type=int)
+                        if 1 <= choice <= len(available_stages):
+                            selected_stage = available_stages[choice - 1]
+                            stage_name = f"@{database}.{schema}.{selected_stage['name']}"
+                            click.echo(f"Selected stage: {stage_name}")
+                            break
+                        else:
+                            click.echo("❌ Invalid choice. Please try again.")
+                    except (ValueError, click.Abort):
+                        click.echo("❌ Invalid input. Please enter a number.")
+            else:
+                click.echo(f"❌ No stages found in {database}.{schema}")
+                click.echo("💡 You can create a stage in Snowflake with: CREATE STAGE my_stage;")
+                
+                # Ask if they want to enter manually
+                manual_entry = click.confirm("💭 Do you want to enter a stage name manually?", default=False)
+                if manual_entry:
+                    stage_name = click.prompt("💭 Enter stage name (e.g., @MY_DATABASE.MY_SCHEMA.MY_STAGE)")
+                else:
+                    click.echo("⏭️  Skipping stage upload")
+                    stage_location = None
+                    stage_name = None
+            
+            if stage_name:
+                stage_filename = click.prompt(f"💭 File name in stage", default=output_file)
+                
+                # Upload to stage
+                click.echo(f"📤 Uploading {output_file} to {stage_name}/{stage_filename}...")
+                
+                upload_data = {
+                    "connection_id": client.connection_id,
+                    "stage_name": stage_name,
+                    "file_name": stage_filename,
+                    "yaml_content": result["yaml_dictionary"]
+                }
+                
+                upload_result = client.post(f"/connection/{client.connection_id}/save-dictionary-to-stage", upload_data)
+                
+                if "error" not in upload_result and upload_result.get("status") == "success":
+                    click.echo(f"✅ Successfully uploaded to {stage_name}/{stage_filename}")
+                    stage_location = f"{stage_name}/{stage_filename}"
+                    
+                    # Verify the upload by listing stage contents
+                    click.echo("🔍 Verifying upload...")
+                    verify_result = client.get(f"/connection/{client.connection_id}/stage-files", 
+                                             params={"stage_name": stage_name})
+                    
+                    if "files" in verify_result:
+                        files = verify_result["files"]
+                        file_names = [f["name"] for f in files]
+                        
+                        # Check for exact match first, then check with stage prefix
+                        uploaded_file = next((f for f in files if f["name"] == stage_filename), None)
+                        if not uploaded_file:
+                            # Check for file with stage prefix (e.g., "cortex_demo_v2_stage/dict1.yaml")
+                            uploaded_file = next((f for f in files if f["name"].endswith(f"/{stage_filename}")), None)
+                        
+                        if uploaded_file:
+                            click.echo(f"✅ File confirmed in stage: {uploaded_file['name']} ({uploaded_file['size']} bytes)")
+                        else:
+                            click.echo(f"⚠️  File not found in stage. Available files: {file_names}")
+                    else:
+                        click.echo(f"❌ Could not verify upload: {verify_result}")
+                else:
+                    click.echo(f"❌ Failed to upload to stage: {upload_result}")
+                    stage_location = None
+            # If stage_name is None, stage_location was already set to None above
+        else:
+            stage_location = None
+
         # Summary
         click.echo("\n" + "=" * 50)
         click.echo("🎉 Workflow Complete!")
         click.echo(f"📊 Database: {database}")
         click.echo(f"📂 Schema: {schema}")
         click.echo(f"📋 Tables: {len(selected_tables)} ({', '.join(selected_tables)})")
-        click.echo(f"📄 Output: {output_file}")
+        click.echo(f"📄 Local File: {output_file}")
+        if stage_location:
+            click.echo(f"☁️  Stage Location: {stage_location}")
         click.echo(f"✅ Status: Success")
         click.echo("=" * 50)
     else:
