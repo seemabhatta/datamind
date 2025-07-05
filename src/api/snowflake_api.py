@@ -706,56 +706,102 @@ async def generate_data_dictionary(connection_id: str, request: DataDictionaryRe
         # Prepare data for LLM processing
         table_analysis = analysis_result["analysis"]
         
-        # Create a temporary CSV-like structure for the LLM utility
-        combined_data = []
-        all_columns = []
+        # Create a multi-table data dictionary using a direct LLM call instead of the single-table utility
+        all_tables_info = []
         
         for table_name, table_info in table_analysis.items():
             if "error" in table_info:
                 continue
-                
-            # Add sample data to combined dataset
-            for row in table_info.get("sample_data", []):
-                # Prefix column names with table name to avoid conflicts
-                prefixed_row = {f"{table_name}.{k}": v for k, v in row.items()}
-                combined_data.append(prefixed_row)
             
-            # Track all columns with metadata
+            # Create table information for the prompt
+            table_prompt_info = f"\nTable: {table_name}\n"
+            table_prompt_info += f"Full Name: {table_info.get('full_name', f'{request.database_name}.{request.schema_name}.{table_name}')}\n"
+            table_prompt_info += f"Row Count: {table_info.get('row_count', 'Unknown')}\n"
+            table_prompt_info += "Columns:\n"
+            
             for col in table_info.get("columns", []):
-                col_info = {
-                    "table": table_name,
-                    "column": col["name"],
-                    "full_name": f"{table_name}.{col['name']}",
-                    "type": col["type"],
-                    "nullable": col["nullable"],
-                    "statistics": col.get("statistics", {}),
-                    "sample_values": col.get("sample_values", [])
-                }
-                all_columns.append(col_info)
+                col_name = col["name"]
+                col_type = col["type"]
+                nullable = "nullable" if col["nullable"] else "not null"
+                sample_values = col.get("sample_values", [])[:3]  # First 3 sample values
+                
+                table_prompt_info += f"  - {col_name} ({col_type}, {nullable})"
+                if sample_values:
+                    table_prompt_info += f" - samples: {sample_values}"
+                table_prompt_info += "\n"
+            
+            all_tables_info.append(table_prompt_info)
         
-        # Create a DataFrame from combined data for the LLM utility
-        if combined_data:
-            combined_df = pd.DataFrame(combined_data)
+        if all_tables_info:
+            # Create a comprehensive prompt for multiple tables
+            tables_description = "\n".join(all_tables_info)
             
-            # Save to temporary CSV for processing
-            temp_csv_path = f"/tmp/snowflake_tables_{connection_id[:8]}.csv"
-            combined_df.to_csv(temp_csv_path, index=False)
+            # Load the enhanced data dictionary system prompt
+            system_prompt_file = "enhancedDDSystemPrompt_v2.txt"
+            system_prompt = llm_util.load_prompt_file(system_prompt_file)
             
-            print(f"DEBUG: Created temporary CSV with {len(combined_df)} rows and {len(combined_df.columns)} columns")
+            # Create user prompt for multiple tables using the correct protobuf schema structure
+            user_prompt = f"""
+Here are the details for {len(all_tables_info)} database tables from {request.database_name}.{request.schema_name}:
+
+{tables_description}
+
+Please generate a comprehensive YAML data dictionary that follows this EXACT structure for Snowflake Cortex Analyst:
+
+tables:
+  - name: "TABLE_NAME"
+    description: "Description of the table"
+    base_table:
+      database: "{request.database_name}"
+      schema: "{request.schema_name}"
+      table: "TABLE_NAME"
+    dimensions:
+      - name: "COLUMN_NAME"
+        description: "Column description"
+        expr: "COLUMN_NAME"
+        dataType: "varchar/number/date/etc"
+        unique: false
+        sampleValues: ["sample1", "sample2"]
+    measures:
+      - name: "NUMERIC_COLUMN_NAME"  
+        description: "Numeric column description"
+        expr: "NUMERIC_COLUMN_NAME"
+        dataType: "number"
+        default_aggregation: "sum"
+        sampleValues: ["123", "456"]
+
+IMPORTANT RULES:
+1. Use "dimensions" for non-numeric columns (text, dates, identifiers)
+2. Use "measures" for numeric columns that can be aggregated
+3. Set dataType to: varchar, number, date, timestamp, boolean, etc.
+4. Include all {len(all_tables_info)} tables
+5. Use the exact field names: name, description, expr, dataType, unique, sampleValues
+6. Do NOT use "category" or "fields" - they are not valid
+7. ALWAYS use database: "{request.database_name}" and schema: "{request.schema_name}" for ALL tables
+
+Please ensure all {len(all_tables_info)} tables are included in the YAML output with the correct database and schema names.
+"""
             
-            # Use the existing LLM utility to generate enhanced data dictionary
-            yaml_text = llm_util.generate_enhanced_data_dictionary(temp_csv_path)
+            print(f"DEBUG: Generating YAML for {len(all_tables_info)} tables using direct LLM call")
+            
+            # Call LLM directly for multi-table data dictionary
+            response = llm_util.call_response_api(llm_util.llm_model, system_prompt, user_prompt)
+            yaml_text = response.choices[0].message.content
+            
+            # Clean up the YAML text (remove any markdown code blocks)
+            if yaml_text.startswith("```yaml"):
+                yaml_text = yaml_text[7:]
+            if yaml_text.startswith("```"):
+                yaml_text = yaml_text[3:]
+            if yaml_text.endswith("```"):
+                yaml_text = yaml_text[:-3]
+            yaml_text = yaml_text.strip()
             
             # Validate YAML against protobuf schema
             is_valid, error = llm_util.validate_yaml_with_proto(yaml_text)
             if not is_valid:
                 print(f"WARNING: Generated YAML failed protobuf validation: {error}")
                 # Continue anyway, but note the warning
-            
-            # Clean up temporary file
-            import os
-            if os.path.exists(temp_csv_path):
-                os.remove(temp_csv_path)
             
             return {
                 "status": "success",
