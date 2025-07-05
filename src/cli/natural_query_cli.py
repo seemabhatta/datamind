@@ -344,17 +344,82 @@ def workflow():
     yaml_context["target_database"] = target_database
     yaml_context["target_schema"] = target_schema
     
-    # Summary
+    # Step 5: Natural Language Query Loop
+    click.echo(f"\n📋 Step 5: Natural Language Query Interface")
+    click.echo("🚀 You can now ask questions about your data in natural language!")
+    click.echo("💡 Tips:")
+    click.echo("   - Ask questions like: 'What is the total revenue?'")
+    click.echo("   - Use table/column names from the YAML if needed")
+    click.echo("   - Type 'quit', 'exit', or 'q' to stop")
+    click.echo("   - Press Ctrl+C to exit anytime")
+    
+    click.echo(f"\n🎯 Query Context:")
+    click.echo(f"   🗄️  Database: {target_database}")
+    click.echo(f"   📂 Schema: {target_schema}")
+    click.echo(f"   📋 Available Tables:")
+    for table in tables_found:
+        click.echo(f"      - {table['name']}")
+    
     click.echo("\n" + "=" * 50)
-    click.echo("🎉 Step 3 Complete!")
+    click.echo("🎤 Ready for your questions!")
+    click.echo("=" * 50)
+    
+    # Query loop
+    query_count = 0
+    while True:
+        try:
+            # Get user input
+            user_query = click.prompt(f"\n💬 Ask a question", type=str).strip()
+            
+            # Check for exit commands
+            if user_query.lower() in ['quit', 'exit', 'q', 'stop']:
+                click.echo("👋 Thanks for using the Natural Query CLI!")
+                break
+            
+            if not user_query:
+                click.echo("❌ Please enter a question.")
+                continue
+            
+            query_count += 1
+            click.echo(f"\n🔍 Processing Query #{query_count}: {user_query}")
+            
+            # For now, we'll prepare the data for the API call
+            # We'll use the first table for queries (can be enhanced later)
+            primary_table = tables_found[0]['name'] if tables_found else None
+            
+            if not primary_table:
+                click.echo("❌ No tables available for querying.")
+                continue
+            
+            click.echo(f"📋 Using table: {primary_table}")
+            click.echo(f"📄 Using dictionary: {selected_filename}")
+            
+            # Step 6 & 7 will be implemented here: SQL translation and execution
+            click.echo("🚧 SQL translation and execution coming in next steps...")
+            click.echo("   This query would be sent to the API for processing.")
+            
+        except click.Abort:
+            click.echo("\n👋 Thanks for using the Natural Query CLI!")
+            break
+        except KeyboardInterrupt:
+            click.echo("\n👋 Thanks for using the Natural Query CLI!")
+            break
+        except Exception as e:
+            click.echo(f"❌ An error occurred: {e}")
+            continue_querying = click.confirm("💭 Continue querying?", default=True)
+            if not continue_querying:
+                break
+    
+    # Final Summary
+    click.echo("\n" + "=" * 50)
+    click.echo("🎉 Session Complete!")
     click.echo(f"📊 Account: {result['account']}")
     click.echo(f"👤 User: {result['user']}")
-    click.echo(f"🔗 Connection: {result['connection_id'][:8]}...")
     click.echo(f"📄 YAML File: {selected_filename}")
-    click.echo(f"🗄️ Target Database: {target_database}")
-    click.echo(f"📂 Target Schema: {target_schema}")
-    click.echo(f"📋 Tables: {len(tables_found)} tables")
-    click.echo("✅ Ready for next step!")
+    click.echo(f"🗄️ Database: {target_database}")
+    click.echo(f"📂 Schema: {target_schema}")
+    click.echo(f"💬 Queries Processed: {query_count}")
+    click.echo("✅ Thank you for using Natural Query CLI!")
     click.echo("=" * 50)
 
 @cli.command()
