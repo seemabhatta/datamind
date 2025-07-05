@@ -1031,6 +1031,10 @@ async def generate_sql_only(connection_id: str, request: QueryRequest):
         sql_clean = re.sub(r'```\s*', '', sql_clean)
         sql_clean = sql_clean.strip()
         
+        # Remove trailing semicolon if present
+        if sql_clean.endswith(';'):
+            sql_clean = sql_clean[:-1].strip()
+        
         # Add LIMIT if not present
         if "LIMIT" not in sql_clean.upper():
             sql_clean += " LIMIT 100"

@@ -394,9 +394,145 @@ def workflow():
             click.echo(f"📋 Using table: {primary_table}")
             click.echo(f"📄 Using dictionary: {selected_filename}")
             
-            # Step 6 & 7 will be implemented here: SQL translation and execution
-            click.echo("🚧 SQL translation and execution coming in next steps...")
-            click.echo("   This query would be sent to the API for processing.")
+            # Step 6: SQL Generation
+            click.echo("🔄 Generating SQL...")
+            
+            # Prepare request for SQL generation
+            sql_request = {
+                "query": user_query,
+                "connection_id": client.connection_id,
+                "table_name": primary_table,
+                "dictionary_content": yaml_content
+            }
+            
+            # Call the SQL generation endpoint
+            sql_result = client.post(f"/connection/{client.connection_id}/generate-sql", sql_request)
+            
+            # Handle API errors
+            if "error" in sql_result:
+                click.echo(f"❌ API Error: {sql_result['error']}")
+                continue
+            
+            # Check intent
+            intent = sql_result.get("intent", "unknown")
+            if intent != "SQL_QUERY":
+                click.echo(f"💡 Intent: {intent}")
+                click.echo(f"📄 {sql_result.get('message', 'Non-SQL query detected')}")
+                
+                # Debug: Show more details about why it was classified as non-SQL
+                click.echo(f"🔧 Debug: Full API response: {sql_result}")
+                
+                # Suggest the user to be more specific
+                if intent == "AMBIGUOUS_QUERY":
+                    click.echo("💡 Try being more specific. Examples:")
+                    click.echo("   - 'How many rows are in the DAILY_REVENUE table?'")
+                    click.echo("   - 'What is the sum of revenue from DAILY_REVENUE?'")
+                    click.echo("   - 'Show me the count of distinct products in DAILY_REVENUE'")
+                continue
+            
+            # Display generated SQL
+            generated_sql = sql_result.get("sql", "")
+            if not generated_sql:
+                click.echo("❌ No SQL generated")
+                continue
+                
+            click.echo(f"✅ SQL Generated:")
+            click.echo(f"🔧 {generated_sql}")
+            
+            # Ask user if they want to execute the SQL
+            execute_sql = click.confirm(f"\n💭 Execute this SQL query?", default=True)
+            if not execute_sql:
+                click.echo("⏭️  Skipping execution")
+                continue
+            
+            # Step 7: SQL Execution
+            click.echo("⚡ Executing SQL...")
+            
+            # Prepare request for SQL execution
+            exec_request = {
+                "connection_id": client.connection_id,
+                "sql": generated_sql,
+                "table_name": primary_table
+            }
+            
+            # Call the SQL execution endpoint
+            exec_result = client.post(f"/connection/{client.connection_id}/execute-sql", exec_request)
+            
+            # Handle execution results
+            if "error" in exec_result:
+                click.echo(f"❌ Execution Error: {exec_result['error']}")
+                continue
+            
+            execution_status = exec_result.get("execution_status", "unknown")
+            
+            if execution_status == "success":
+                click.echo(f"✅ Query executed successfully!")
+                
+                # Display row count
+                row_count = exec_result.get("row_count", 0)
+                click.echo(f"📊 Returned {row_count} rows")
+                
+                # Display results
+                if "result" in exec_result and exec_result["result"]:
+                    results = exec_result["result"]
+                    
+                    # Show column headers
+                    if "columns" in exec_result:
+                        columns = exec_result["columns"]
+                        click.echo(f"📋 Columns: {', '.join(columns)}")
+                    
+                    # Display sample results
+                    click.echo(f"\n📋 Sample Results:")
+                    max_rows = min(5, len(results))
+                    for i in range(max_rows):
+                        row_items = list(results[i].items())[:3]  # Show first 3 columns
+                        row_display = ", ".join([f"{k}: {v}" for k, v in row_items])
+                        click.echo(f"   Row {i+1}: {row_display}")
+                    
+                    if len(results) > max_rows:
+                        click.echo(f"   ... and {len(results) - max_rows} more rows")
+                    
+                    # Ask if user wants a summary
+                    if row_count > 0:
+                        generate_summary = click.confirm(f"\n💭 Generate AI summary of results?", default=True)
+                        if generate_summary:
+                            click.echo("🤖 Generating summary...")
+                            
+                            # Prepare request for summary generation
+                            summary_request = {
+                                "connection_id": client.connection_id,
+                                "query": user_query,
+                                "sql": generated_sql,
+                                "results": results
+                            }
+                            
+                            # Call the summary generation endpoint
+                            summary_result = client.post(f"/connection/{client.connection_id}/generate-summary", summary_request)
+                            
+                            if "error" in summary_result:
+                                click.echo(f"❌ Summary Error: {summary_result['error']}")
+                            elif "summary" in summary_result:
+                                click.echo(f"✅ AI Summary:")
+                                click.echo(f"📝 {summary_result['summary']}")
+                            else:
+                                click.echo("⚠️  No summary generated")
+                        
+                elif row_count == 0:
+                    click.echo("📋 No data returned")
+                    
+            elif execution_status == "failed":
+                click.echo(f"❌ Query execution failed!")
+                if "sql_error" in exec_result:
+                    click.echo(f"💥 SQL Error: {exec_result['sql_error']}")
+                    
+            else:
+                click.echo(f"⚠️  Unknown execution status: {execution_status}")
+                
+            # Show success message if available
+            if "message" in exec_result:
+                click.echo(f"💬 {exec_result['message']}")
+                
+            click.echo("")  # Add spacing between queries
             
         except click.Abort:
             click.echo("\n👋 Thanks for using the Natural Query CLI!")
