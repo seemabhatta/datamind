@@ -726,11 +726,22 @@ async def generate_data_dictionary(connection_id: str, request: DataDictionaryRe
                 col_name = col["name"]
                 col_type = col["type"]
                 nullable = "nullable" if col["nullable"] else "not null"
-                sample_values = col.get("sample_values", [])[:3]  # First 3 sample values
+                sample_values = col.get("sample_values", [])[:5]  # First 5 sample values for better context
+                stats = col.get("statistics", {})
                 
                 table_prompt_info += f"  {i}. {col_name} ({col_type}, {nullable})"
                 if sample_values:
                     table_prompt_info += f" - samples: {sample_values}"
+                
+                # Add statistical context for better descriptions
+                if stats:
+                    if 'distinct_count' in stats:
+                        table_prompt_info += f" - distinct values: {stats['distinct_count']}"
+                    if 'min_val' in stats and 'max_val' in stats:
+                        table_prompt_info += f" - range: {stats['min_val']} to {stats['max_val']}"
+                    if 'avg_val' in stats:
+                        table_prompt_info += f" - average: {stats['avg_val']:.2f}"
+                        
                 table_prompt_info += "\n"
             
             all_tables_info.append(table_prompt_info)
@@ -753,21 +764,21 @@ Please generate a comprehensive YAML data dictionary that follows this EXACT str
 
 tables:
   - name: "TABLE_NAME"
-    description: "Description of the table"
+    description: "Concise business description of table purpose (max 15 words)"
     base_table:
       database: "{request.database_name}"
       schema: "{request.schema_name}"
       table: "TABLE_NAME"
     dimensions:
       - name: "COLUMN_NAME"
-        description: "Column description"
+        description: "Concise business meaning of column (max 15 words)"
         expr: "COLUMN_NAME"
         dataType: "varchar/number/date/etc"
         unique: false
         sampleValues: ["sample1", "sample2"]
     measures:
       - name: "NUMERIC_COLUMN_NAME"  
-        description: "Numeric column description"
+        description: "Concise description of what this measures (max 15 words)"
         expr: "NUMERIC_COLUMN_NAME"
         dataType: "number"
         default_aggregation: "sum"
@@ -785,10 +796,29 @@ CRITICAL REQUIREMENTS:
 9. The "expr" field should always be the same as the column name
 10. Include sample values from the data provided
 
+DESCRIPTION REQUIREMENTS - Generate CONCISE, MEANINGFUL descriptions:
+IMPORTANT: ALL descriptions must be 15 words or less.
+
+For TABLE descriptions (max 15 words):
+- Focus on primary business purpose and data type
+- Example: "Customer demographic and contact information for marketing analysis"
+
+For COLUMN descriptions (max 15 words):
+- Explain business meaning concisely
+- Include key context from sample values
+- Examples:
+  * "Customer unique identifier for tracking and relationship management"
+  * "Annual income amount in USD for demographic analysis"
+  * "Account creation date for customer lifecycle tracking"
+  * "Primary email address for communication and login authentication"
+
+Use sample values and statistics to infer business context but keep descriptions under 15 words.
+
 VERIFICATION CHECKLIST - Ensure your YAML includes:
 - All {len(all_tables_info)} tables
 - Every column from each table (check the "Total Columns" count for each table)
 - Proper categorization as dimensions or measures based on data type
+- Concise descriptions (15 words or less) for all tables and columns
 """
             
             print(f"DEBUG: Generating YAML for {len(all_tables_info)} tables using direct LLM call")
