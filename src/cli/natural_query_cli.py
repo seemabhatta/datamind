@@ -463,9 +463,10 @@ def workflow():
                 click.echo(f"❌ Execution Error: {exec_result['error']}")
                 continue
             
-            execution_status = exec_result.get("execution_status", "unknown")
+            # Check execution status (the endpoint returns "status" not "execution_status")
+            status = exec_result.get("status", "unknown")
             
-            if execution_status == "success":
+            if status == "success":
                 click.echo(f"✅ Query executed successfully!")
                 
                 # Display row count
@@ -520,13 +521,13 @@ def workflow():
                 elif row_count == 0:
                     click.echo("📋 No data returned")
                     
-            elif execution_status == "failed":
+            elif status == "error":
                 click.echo(f"❌ Query execution failed!")
                 if "sql_error" in exec_result:
                     click.echo(f"💥 SQL Error: {exec_result['sql_error']}")
                     
             else:
-                click.echo(f"⚠️  Unknown execution status: {execution_status}")
+                click.echo(f"⚠️  Unknown status: {status}")
                 
             # Show success message if available
             if "message" in exec_result:
