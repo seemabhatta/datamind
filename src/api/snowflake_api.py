@@ -18,6 +18,7 @@ load_dotenv()
 # Add the project root to the path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from utils import llm_util
+import config
 
 app = FastAPI(title="Snowflake Cortex Analyst API", description="API for Snowflake-native NL2SQL")
 app.add_middleware(
@@ -359,7 +360,7 @@ async def process_nl_query(connection_id: str, request: QueryRequest):
             # Create enriched prompt like the original NL2SQL API
             try:
                 # Load system prompt from file (like nl2sql_api does)
-                system_prompt_file_path = "nl2sqlSystemPrompt.txt"
+                system_prompt_file_path = config.NL2SQL_SYSTEM_PROMPT_FILE
                 system_prompt = llm_util.load_prompt_file(system_prompt_file_path)
                 
                 # Get sample data from Snowflake table (equivalent to CSV sample data)
@@ -820,24 +821,17 @@ VERIFICATION CHECKLIST - Ensure your YAML includes:
 - Concise descriptions (15 words or less) for all tables and columns
 """
             
-            print(f"DEBUG: Generating YAML for {len(all_tables_info)} tables using direct LLM call")
+            print(f"DEBUG: Generating YAML for {len(all_tables_info)} tables using structured output")
             
-            # Call LLM directly for multi-table data dictionary
-            response = llm_util.call_response_api(llm_util.llm_model, system_prompt, user_prompt)
-            yaml_text = response.choices[0].message.content
+            # Create comprehensive prompt for structured generation
+            complete_prompt = f"{system_prompt}\n\n{user_prompt}"
             
-            # Clean up the YAML text (remove any markdown code blocks)
-            if yaml_text.startswith("```yaml"):
-                yaml_text = yaml_text[7:]
-            if yaml_text.startswith("```"):
-                yaml_text = yaml_text[3:]
-            if yaml_text.endswith("```"):
-                yaml_text = yaml_text[:-3]
-            yaml_text = yaml_text.strip()
+            # Generate YAML using structured output (guaranteed valid)
+            yaml_text = llm_util.generate_structured_yaml(complete_prompt)
+            parsed_yaml = yaml.safe_load(yaml_text)  # Safe to parse - guaranteed valid
             
             # Verify that all columns are included in the generated YAML
             try:
-                parsed_yaml = yaml.safe_load(yaml_text)
                 verification_results = []
                 
                 for table_name, table_info in table_analysis.items():
@@ -887,7 +881,7 @@ VERIFICATION CHECKLIST - Ensure your YAML includes:
                 "schema": request.schema_name,
                 "tables": request.tables,
                 "yaml_dictionary": yaml_text,
-                "parsed_dictionary": yaml.safe_load(yaml_text),
+                "parsed_dictionary": parsed_yaml,
                 "validation_status": "valid" if is_valid else "invalid",
                 "validation_error": error if not is_valid else None,
                 "tables_processed": len([t for t in table_analysis.values() if "error" not in t])
@@ -992,7 +986,7 @@ async def generate_sql_only(connection_id: str, request: QueryRequest):
         
         # Create enriched prompt with sample data
         try:
-            system_prompt_file_path = "nl2sqlSystemPrompt.txt"
+            system_prompt_file_path = config.NL2SQL_SYSTEM_PROMPT_FILE
             system_prompt = llm_util.load_prompt_file(system_prompt_file_path)
             
             # Get sample data from Snowflake table
