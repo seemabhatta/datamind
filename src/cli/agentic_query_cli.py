@@ -5,15 +5,22 @@ Built with OpenAI Agent SDK
 """
 
 import click
-import requests
 import json
 import yaml
 import os
+import sys
 from typing import Optional, Dict, Any, List
 from agents import Agent, Runner, function_tool
 from dataclasses import dataclass
 
-BASE_URL = "http://localhost:8001"
+# Add the project root to the path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+# Import our function modules
+from src.functions.connection_functions import connect_to_snowflake as connect_func
+from src.functions.metadata_functions import list_databases, list_schemas, list_stages, list_stage_files
+from src.functions.stage_functions import load_stage_file as load_stage_func
+from src.functions.query_functions import generate_sql_only, execute_sql_only, generate_query_summary
 
 @dataclass
 class AgentContext:
@@ -33,18 +40,7 @@ class AgentContext:
 # Global context for the agent
 agent_context = AgentContext()
 
-class APIClient:
-    """Wrapper for existing API calls"""
-    
-    @staticmethod
-    def post(endpoint: str, data: Optional[Dict] = None) -> Dict:
-        response = requests.post(f"{BASE_URL}{endpoint}", json=data)
-        return response.json() if response.status_code == 200 else {"error": response.text}
-    
-    @staticmethod
-    def get(endpoint: str, params: Optional[Dict] = None) -> Dict:
-        response = requests.get(f"{BASE_URL}{endpoint}", params=params)
-        return response.json() if response.status_code == 200 else {"error": response.text}
+# Removed APIClient class - using direct function calls instead
 
 # Tool Functions for Agent SDK
 @function_tool
@@ -54,8 +50,8 @@ def connect_to_snowflake() -> str:
     if agent_context.connection_id:
         return f"✅ Already connected (Connection ID: {agent_context.connection_id[:8]}...)"
     
-    result = APIClient.post("/connect")
-    if "connection_id" in result:
+    result = connect_func()
+    if result["status"] == "success":
         agent_context.connection_id = result["connection_id"]
         return f"✅ Connected to {result['account']} as {result['user']} (Connection ID: {result['connection_id'][:8]}...)"
     else:
@@ -67,8 +63,8 @@ def get_databases() -> str:
     if not agent_context.connection_id:
         return "❌ No connection established. Please connect first."
     
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/databases")
-    if "databases" in result:
+    result = list_databases(agent_context.connection_id)
+    if result["status"] == "success":
         databases = result["databases"]
         return f"📊 Found {len(databases)} databases: {', '.join(databases)}"
     else:
@@ -94,9 +90,8 @@ def get_schemas(database_name: Optional[str] = None) -> str:
     if not db_name:
         return "❌ No database specified. Please select a database first."
     
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/schemas", 
-                          params={"database": db_name})
-    if "schemas" in result:
+    result = list_schemas(agent_context.connection_id, db_name)
+    if result["status"] == "success":
         schemas = result["schemas"]
         return f"📂 Found {len(schemas)} schemas in {db_name}: {', '.join(schemas)}"
     else:
@@ -121,10 +116,8 @@ def get_stages() -> str:
     if not agent_context.current_database or not agent_context.current_schema:
         return "❌ Database and schema must be selected first."
     
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/stages", 
-                          params={"database": agent_context.current_database, 
-                                "schema": agent_context.current_schema})
-    if "stages" in result:
+    result = list_stages(agent_context.connection_id, agent_context.current_database, agent_context.current_schema)
+    if result["status"] == "success":
         stages = result["stages"]
         stage_info = [f"{s['name']} ({s['type']})" for s in stages]
         return f"📋 Found {len(stages)} stages: {', '.join(stage_info)}"
@@ -147,9 +140,8 @@ def get_yaml_files() -> str:
     if not agent_context.current_stage:
         return "❌ No stage selected. Please select a stage first."
     
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/stage-files", 
-                          params={"stage_name": agent_context.current_stage})
-    if "files" in result:
+    result = list_stage_files(agent_context.connection_id, agent_context.current_stage)
+    if result["status"] == "success":
         files = result["files"]
         yaml_files = [f for f in files if f["name"].endswith(('.yaml', '.yml'))]
         if yaml_files:
@@ -167,11 +159,9 @@ def load_yaml_file(filename: str) -> str:
         return "❌ No stage selected. Please select a stage first."
     
     # Load YAML content
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/load-stage-file", 
-                          params={"stage_name": agent_context.current_stage, 
-                                "file_name": filename})
+    result = load_stage_func(agent_context.connection_id, agent_context.current_stage, filename)
     
-    if "content" not in result:
+    if result["status"] != "success":
         return f"❌ Failed to load YAML file: {result.get('error', 'Unknown error')}"
     
     yaml_content = result["content"]
@@ -230,16 +220,9 @@ def generate_sql(query: str, table_name: Optional[str] = None) -> str:
     if not table_name:
         return "❌ No table specified and no tables available."
     
-    sql_request = {
-        "query": query,
-        "connection_id": agent_context.connection_id,
-        "table_name": table_name,
-        "dictionary_content": agent_context.yaml_content
-    }
+    result = generate_sql_only(agent_context.connection_id, query, table_name, agent_context.yaml_content)
     
-    result = APIClient.post(f"/connection/{agent_context.connection_id}/generate-sql", sql_request)
-    
-    if "error" in result:
+    if result["status"] == "error":
         return f"❌ SQL generation failed: {result['error']}"
     
     intent = result.get("intent", "unknown")
@@ -261,19 +244,12 @@ def execute_sql(sql: str, table_name: Optional[str] = None) -> str:
     if not table_name and agent_context.tables:
         table_name = agent_context.tables[0]['name']
     
-    exec_request = {
-        "connection_id": agent_context.connection_id,
-        "sql": sql,
-        "table_name": table_name or "unknown"
-    }
+    result = execute_sql_only(agent_context.connection_id, sql, table_name or "unknown")
     
-    result = APIClient.post(f"/connection/{agent_context.connection_id}/execute-sql", exec_request)
-    
-    if "error" in result:
+    if result["status"] == "error":
         return f"❌ SQL execution failed: {result['error']}"
     
-    status = result.get("status", "unknown")
-    if status == "success":
+    if result["status"] == "success":
         row_count = result.get("row_count", 0)
         response = f"✅ Query executed successfully! Returned {row_count} rows."
         
@@ -295,16 +271,15 @@ def generate_summary(query: str, sql: str, results: str) -> str:
     if not agent_context.connection_id:
         return "❌ No connection established. Please connect first."
     
-    summary_request = {
-        "connection_id": agent_context.connection_id,
-        "query": query,
-        "sql": sql,
-        "results": results
-    }
+    # Convert results string to list format expected by function
+    try:
+        results_list = eval(results) if isinstance(results, str) else results
+    except:
+        results_list = []
     
-    result = APIClient.post(f"/connection/{agent_context.connection_id}/generate-summary", summary_request)
+    result = generate_query_summary(agent_context.connection_id, query, sql, results_list)
     
-    if "error" in result:
+    if result["status"] == "error":
         return f"❌ Summary generation failed: {result['error']}"
     
     if "summary" in result:
