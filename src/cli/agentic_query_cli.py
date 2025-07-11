@@ -50,6 +50,10 @@ class APIClient:
 @function_tool
 def connect_to_snowflake() -> str:
     """Connect to Snowflake and establish a connection"""
+    # Check if already connected
+    if agent_context.connection_id:
+        return f"✅ Already connected (Connection ID: {agent_context.connection_id[:8]}...)"
+    
     result = APIClient.post("/connect")
     if "connection_id" in result:
         agent_context.connection_id = result["connection_id"]
@@ -76,14 +80,7 @@ def select_database(database_name: str) -> str:
     if not agent_context.connection_id:
         return "❌ No connection established. Please connect first."
     
-    # Verify database exists
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/databases")
-    if "databases" not in result:
-        return f"❌ Failed to verify database: {result.get('error', 'Unknown error')}"
-    
-    if database_name not in result["databases"]:
-        return f"❌ Database '{database_name}' not found. Available: {', '.join(result['databases'])}"
-    
+    # Just set the database - skip verification to avoid duplicate calls
     agent_context.current_database = database_name
     return f"✅ Selected database: {database_name}"
 
@@ -111,15 +108,7 @@ def select_schema(schema_name: str) -> str:
     if not agent_context.current_database:
         return "❌ No database selected. Please select a database first."
     
-    # Verify schema exists
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/schemas", 
-                          params={"database": agent_context.current_database})
-    if "schemas" not in result:
-        return f"❌ Failed to verify schema: {result.get('error', 'Unknown error')}"
-    
-    if schema_name not in result["schemas"]:
-        return f"❌ Schema '{schema_name}' not found. Available: {', '.join(result['schemas'])}"
-    
+    # Just set the schema - skip verification to avoid duplicate calls
     agent_context.current_schema = schema_name
     return f"✅ Selected schema: {schema_name}"
 
@@ -148,17 +137,7 @@ def select_stage(stage_name: str) -> str:
     if not agent_context.current_database or not agent_context.current_schema:
         return "❌ Database and schema must be selected first."
     
-    # Verify stage exists
-    result = APIClient.get(f"/connection/{agent_context.connection_id}/stages", 
-                          params={"database": agent_context.current_database, 
-                                "schema": agent_context.current_schema})
-    if "stages" not in result:
-        return f"❌ Failed to verify stage: {result.get('error', 'Unknown error')}"
-    
-    stage_names = [s['name'] for s in result["stages"]]
-    if stage_name not in stage_names:
-        return f"❌ Stage '{stage_name}' not found. Available: {', '.join(stage_names)}"
-    
+    # Just set the stage - skip verification to avoid duplicate calls
     agent_context.current_stage = f"@{agent_context.current_database}.{agent_context.current_schema}.{stage_name}"
     return f"✅ Selected stage: {agent_context.current_stage}"
 
@@ -408,6 +387,10 @@ Example 4:
 User: "give me sample queries"
 Assistant: [calls get_yaml_content() first to analyze the data structure, then provides contextual sample queries based on actual tables and columns]
 
+Example 5:
+User: "load hmda_v4.yaml"
+Assistant: [calls load_yaml_file("hmda_v4.yaml") directly - does NOT call connect_to_snowflake() again since already connected]
+
 Workflow:
 1. When asked to initialize, automatically: connect to Snowflake → get databases → select first database → get schemas → select first schema → get stages → select first stage → get YAML files → show available YAML files to user
 2. When user selects a YAML file, load it and auto-connect to the database/schema specified in the YAML
@@ -417,9 +400,19 @@ Workflow:
 
 Auto-initialization Steps:
 - Connect to Snowflake immediately
-- Navigate through databases/schemas/stages automatically
+- Get databases, select the first one directly
+- Get schemas, select the first one directly  
+- Get stages, select the first one directly
 - Present YAML files for user selection
 - Once YAML is loaded, the system is ready for queries
+
+EFFICIENCY RULES:
+- Avoid duplicate API calls - don't verify selections that were just made
+- Use the most direct path to get to YAML files
+- Don't call the same endpoint multiple times unnecessarily
+- Once connected, reuse the same connection for all operations
+- NEVER call connect_to_snowflake() more than once per session
+- Check connection status before attempting to reconnect
 
 Guidelines:
 - Be action-oriented and use tools proactively
@@ -427,6 +420,24 @@ Guidelines:
 - Handle errors gracefully and suggest solutions
 - Provide clear feedback on what's happening
 - When users ask for sample queries, analyze the actual YAML content to provide relevant examples
+
+CRITICAL: QUERY EXECUTION BEHAVIOR
+- If a YAML file is already loaded and user asks a data query, IMMEDIATELY use generate_sql() tool
+- Do NOT suggest loading different files if you already have relevant data loaded
+- Always check get_current_context() to see what data is available before suggesting alternatives
+- If user asks a query that can be answered with current data, generate SQL and execute it immediately
+
+Query Execution Examples:
+User: "List the number of loans by agency"
+Assistant: [calls generate_sql() immediately with the user's query, then execute_sql() with the result]
+
+User: "Show me the top 10 customers"  
+Assistant: [calls generate_sql() immediately, then execute_sql()]
+
+User: "What's the average loan amount?"
+Assistant: [calls generate_sql() immediately, then execute_sql()]
+
+Do NOT ask for clarification or suggest loading different files if you have data that can answer the question.
 
 Use the available tools to help users accomplish their goals efficiently.
 """
