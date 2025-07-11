@@ -218,7 +218,19 @@ def load_yaml_file(filename: str) -> str:
         
         agent_context.tables = tables
         
-        return f"✅ Loaded and parsed {filename} ({len(yaml_content)} chars). Found {len(tables)} tables: {[t['name'] for t in tables]}"
+        # Auto-connect to database and schema from YAML
+        if tables:
+            first_table = tables[0]
+            db_name = first_table.get('database')
+            schema_name = first_table.get('schema')
+            
+            if db_name and db_name != agent_context.current_database:
+                agent_context.current_database = db_name
+                
+            if schema_name and schema_name != agent_context.current_schema:
+                agent_context.current_schema = schema_name
+        
+        return f"✅ Loaded and parsed {filename} ({len(yaml_content)} chars). Found {len(tables)} tables: {[t['name'] for t in tables]}. Auto-connected to database: {agent_context.current_database}, schema: {agent_context.current_schema}"
         
     except yaml.YAMLError as e:
         return f"❌ Failed to parse YAML: {e}"
@@ -349,6 +361,14 @@ def get_current_context() -> str:
     
     return "\n".join(context_info) if context_info else "No context available"
 
+@function_tool
+def get_yaml_content() -> str:
+    """Get the loaded YAML data dictionary content for analysis"""
+    if not agent_context.yaml_content:
+        return "❌ No YAML file loaded. Please load a data dictionary first."
+    
+    return f"📄 **YAML Data Dictionary Content:**\n\n{agent_context.yaml_content}"
+
 # Agent Instructions
 AGENT_INSTRUCTIONS = """
 You are a Snowflake Query Assistant that helps users interact with their Snowflake data using natural language.
@@ -361,21 +381,52 @@ Your capabilities:
 5. Execute SQL queries and show results
 6. Generate AI summaries of query results
 
+IMPORTANT BEHAVIORAL GUIDELINES:
+- Always consider the context of your previous message when interpreting user responses
+- When you present options/lists to users, remember what you just showed them
+- Be proactive in using tools when users give clear directives or selections
+- If a user gives a brief response, consider it in context of what you just presented
+- Don't ask for clarification if the user's intent is clear from context
+
+CONTEXTUAL RESPONSE EXAMPLES:
+Example 1:
+Assistant: "I found 2 databases: 1. CORTES_DEMO_2  2. SNOWFLAKE. Which would you like to explore?"
+User: "1"
+Assistant: [calls select_database("CORTES_DEMO_2") immediately]
+
+Example 2:
+Assistant: "Here are the YAML files: 1. dict0.yaml  2. dict01.yaml  3. dict1.yaml"
+User: "load the first one"
+Assistant: [calls load_yaml_file("dict0.yaml") immediately]
+
+Example 3:
+Assistant: "I found 3 schemas: PUBLIC, STAGING, PROD"
+User: "public"
+Assistant: [calls select_schema("PUBLIC") immediately]
+
+Example 4:
+User: "give me sample queries"
+Assistant: [calls get_yaml_content() first to analyze the data structure, then provides contextual sample queries based on actual tables and columns]
+
 Workflow:
-1. Always start by connecting to Snowflake if not already connected
-2. Help users navigate to the right database/schema/stage
-3. Load the appropriate YAML data dictionary
-4. Process their natural language queries
-5. Generate and execute SQL
-6. Provide clear, helpful results
+1. When asked to initialize, automatically: connect to Snowflake → get databases → select first database → get schemas → select first schema → get stages → select first stage → get YAML files → show available YAML files to user
+2. When user selects a YAML file, load it and auto-connect to the database/schema specified in the YAML
+3. Process their natural language queries using the loaded data dictionary
+4. Generate and execute SQL based on the YAML table structure
+5. Provide clear, helpful results
+
+Auto-initialization Steps:
+- Connect to Snowflake immediately
+- Navigate through databases/schemas/stages automatically
+- Present YAML files for user selection
+- Once YAML is loaded, the system is ready for queries
 
 Guidelines:
-- Be conversational and helpful
-- Always check current context before proceeding
+- Be action-oriented and use tools proactively
 - Guide users through the workflow step by step
 - Handle errors gracefully and suggest solutions
 - Provide clear feedback on what's happening
-- Ask clarifying questions when needed
+- When users ask for sample queries, analyze the actual YAML content to provide relevant examples
 
 Use the available tools to help users accomplish their goals efficiently.
 """
@@ -397,7 +448,8 @@ snowflake_agent = Agent(
         generate_sql,
         execute_sql,
         generate_summary,
-        get_current_context
+        get_current_context,
+        get_yaml_content
     ]
 )
 
@@ -416,6 +468,13 @@ def agent(query):
     click.echo("💬 Just tell me what you want to do, and I'll guide you through it.")
     click.echo("🔧 Type 'quit', 'exit', or press Ctrl+C to stop")
     click.echo("=" * 50)
+    
+    # Auto-initialize the system
+    click.echo("\n🔄 Initializing system...")
+    initialization_prompt = "Please connect to Snowflake, navigate to the available databases and schemas, find the stage with YAML files, and show me the available YAML data dictionaries so I can select one to work with."
+    
+    result = Runner.run_sync(snowflake_agent, initialization_prompt)
+    click.echo(f"🤖 Assistant: {result.final_output}")
     
     # Start with initial query if provided
     if query:
