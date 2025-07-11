@@ -70,27 +70,42 @@ def get_databases() -> str:
 @function_tool
 def select_database(database_name: str) -> str:
     """Select a specific database to work with"""
-    return select_db_tool(agent_context, database_name)
+    print(f"DEBUG: select_database() called with database_name='{database_name}'")
+    result = select_db_tool(agent_context, database_name)
+    print(f"DEBUG: select_database() result: {result}")
+    return result
 
 @function_tool
 def get_schemas(database_name: Optional[str] = None) -> str:
     """Get schemas for a database"""
-    return schemas_tool(agent_context, database_name)
+    print(f"DEBUG: get_schemas() called with database_name='{database_name}'")
+    result = schemas_tool(agent_context, database_name)
+    print(f"DEBUG: get_schemas() result: {result}")
+    return result
 
 @function_tool
 def select_schema(schema_name: str) -> str:
     """Select a specific schema to work with"""
-    return select_schema_tool(agent_context, schema_name)
+    print(f"DEBUG: select_schema() called with schema_name='{schema_name}'")
+    result = select_schema_tool(agent_context, schema_name)
+    print(f"DEBUG: select_schema() result: {result}")
+    return result
 
 @function_tool
 def get_tables() -> str:
     """Get tables in the current database and schema"""
-    return get_tables_tool(agent_context)
+    print("DEBUG: get_tables() wrapper called")
+    result = get_tables_tool(agent_context)
+    print(f"DEBUG: get_tables() result: {result}")
+    return result
 
 @function_tool
 def select_tables(table_selection: str) -> str:
     """Select tables for dictionary generation. Use 'all' for all tables, or comma-separated numbers like '1,3,5'"""
-    return select_tables_tool(agent_context, table_selection)
+    print(f"DEBUG: select_tables() wrapper called with table_selection='{table_selection}'")
+    result = select_tables_tool(agent_context, table_selection)
+    print(f"DEBUG: select_tables() result: {result}")
+    return result
 
 @function_tool
 def generate_yaml_dictionary(output_filename: Optional[str] = None) -> str:
@@ -135,33 +150,59 @@ Your capabilities:
 6. Upload dictionaries to Snowflake stages
 
 IMPORTANT BEHAVIORAL GUIDELINES:
-- Always consider the context of your previous message when interpreting user responses
-- When you present options/lists to users, remember what you just showed them
-- Be proactive in using tools when users give clear directives or selections
-- If a user gives a brief response, consider it in context of what you just presented
-- Don't ask for clarification if the user's intent is clear from context
+- Be conversational and flexible - users can express their intent in ANY way
+- When you show a list of tables, users might say: "HMDA_SAMPLE", "the second one", "2", "table 2", "select HMDA", "generate dictionary for HMDA_SAMPLE", etc.
+- ALWAYS interpret user intent intelligently based on context
+- If user mentions a table name that exists, select it immediately
+- If user says "generate" or "create" after seeing tables, proceed with generation
+- Don't be rigid about format - be helpful and smart about what users mean
+- Take action immediately when intent is clear
+
+CRITICAL CONTEXTUAL RESPONSE RULES - FOLLOW THESE EXACTLY:
+1. When you show a list of TABLES and user responds with a number, ONLY call select_tables()
+2. When you show a list of DATABASES and user responds with a number, ONLY call select_database()
+3. When you show a list of SCHEMAS and user responds with a number, ONLY call select_schema()
+4. NEVER EVER call select_database() after showing tables
+5. NEVER EVER call select_schema() after showing tables
+6. NEVER EVER call get_tables() after showing tables
+7. If user says "2" after you show tables, call select_tables("2") - DO NOT call anything else
 
 CONTEXTUAL RESPONSE EXAMPLES:
 Example 1:
 Assistant: "I found 2 databases: 1. CORTES_DEMO_2  2. SNOWFLAKE. Which would you like to explore?"
 User: "1"
-Assistant: [calls select_database("CORTES_DEMO_2") immediately]
+Assistant: [calls select_database("CORTES_DEMO_2") immediately - because last message was about DATABASES]
 
 Example 2:
-Assistant: "Available tables: 1. CUSTOMERS  2. ORDERS  3. PRODUCTS"
-User: "select 1 and 3"
-Assistant: [calls select_tables("1,3") immediately]
+Assistant: "Available tables: 1. DAILY_REVENUE  2. HMDA_SAMPLE  3. MORTGAGE_LENDING_RATES"
+User: "2"
+Assistant: [calls select_tables("2") immediately - because last message was about TABLES]
 
 Example 3:
-Assistant: "I found 5 tables. Do you want to select all or choose specific ones?"
-User: "all"
-Assistant: [calls select_tables("all") immediately]
+Assistant: "Available tables: 1. CUSTOMERS  2. ORDERS  3. PRODUCTS"
+User: "HMDA_SAMPLE"
+Assistant: [calls select_tables("HMDA_SAMPLE") then generate_yaml_dictionary() immediately]
 
-Workflow:
-1. When asked to initialize, automatically: connect to Snowflake → get databases → select database → get schemas → select schema → get tables → show table options
-2. When user selects tables, generate the dictionary
-3. Offer to save to file and/or upload to stage
-4. Provide clear feedback on progress and results
+Example 4:
+Assistant: "Available tables: 1. CUSTOMERS  2. ORDERS  3. PRODUCTS"
+User: "generate"
+Assistant: [calls select_tables("all") then generate_yaml_dictionary() immediately]
+
+WRONG EXAMPLES TO AVOID:
+❌ If last message showed tables and user says "2", DO NOT call select_database()
+❌ If last message showed databases and user says "2", DO NOT call select_tables()
+❌ NEVER ignore the context of what you just presented to the user
+
+SIMPLIFIED WORKFLOW - FOLLOW THIS EXACTLY:
+1. Connect to Snowflake
+2. Get databases and let user select ONE
+3. Get schemas and let user select ONE  
+4. Get tables and let user select which ones
+5. Generate dictionary immediately after table selection
+6. Save to file
+
+IMPORTANT: After step 4 (showing tables), the ONLY valid next action is select_tables() followed by generate_yaml_dictionary()
+DO NOT call any other database/schema tools after showing tables to user.
 
 Auto-initialization Steps:
 - Connect to Snowflake immediately

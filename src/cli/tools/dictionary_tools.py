@@ -17,13 +17,20 @@ from src.functions.stage_functions import save_dictionary_to_stage
 
 def get_tables_impl(agent_context) -> str:
     """Get tables in the current database and schema"""
+    print(f"DEBUG: get_tables_impl called with connection_id={agent_context.connection_id}, database={agent_context.current_database}, schema={agent_context.current_schema}")
+    
     if not agent_context.connection_id:
+        print("DEBUG: No connection established")
         return "❌ No connection established. Please connect first."
     
     if not agent_context.current_database or not agent_context.current_schema:
+        print("DEBUG: Database or schema not selected")
         return "❌ Database and schema must be selected first."
     
+    print(f"DEBUG: Calling list_tables with connection_id={agent_context.connection_id}, database={agent_context.current_database}, schema={agent_context.current_schema}")
     result = list_tables(agent_context.connection_id, agent_context.current_database, agent_context.current_schema)
+    print(f"DEBUG: list_tables result: {result}")
+    
     if result["status"] == "success":
         tables = result["tables"]
         table_list = []
@@ -32,49 +39,47 @@ def get_tables_impl(agent_context) -> str:
         
         # Store tables in context for later selection
         agent_context.available_tables = tables
+        print(f"DEBUG: Found {len(tables)} tables, stored in context")
         
         return f"📊 Found {len(tables)} tables in {agent_context.current_database}.{agent_context.current_schema}:\n" + "\n".join(table_list)
     else:
+        print(f"DEBUG: Failed to get tables: {result.get('error', 'Unknown error')}")
         return f"❌ Failed to get tables: {result.get('error', 'Unknown error')}"
 
 
 def select_tables_impl(agent_context, table_selection: str) -> str:
-    """Select tables for dictionary generation. Use 'all' for all tables, or comma-separated numbers like '1,3,5'"""
+    """Select tables for dictionary generation based on flexible user input"""
+    print(f"DEBUG: select_tables_impl called with table_selection='{table_selection}'")
+    print(f"DEBUG: agent_context state - connection_id={agent_context.connection_id}, database={agent_context.current_database}, schema={agent_context.current_schema}")
+    
     if not agent_context.connection_id:
+        print("DEBUG: No connection established")
         return "❌ No connection established. Please connect first."
     
     if not agent_context.current_database or not agent_context.current_schema:
+        print("DEBUG: Database or schema not selected")
         return "❌ Database and schema must be selected first."
     
     # Get available tables if not already stored
     if not hasattr(agent_context, 'available_tables') or not agent_context.available_tables:
+        print("DEBUG: No available_tables in context, fetching from database")
         result = list_tables(agent_context.connection_id, agent_context.current_database, agent_context.current_schema)
+        print(f"DEBUG: list_tables result: {result}")
         if result["status"] != "success":
             return f"❌ Failed to get tables: {result.get('error', 'Unknown error')}"
         agent_context.available_tables = result["tables"]
     
     available_tables = agent_context.available_tables
+    table_names = [table['table'] for table in available_tables]
+    print(f"DEBUG: Available tables: {table_names}")
     
-    if table_selection.lower() == "all":
-        agent_context.selected_tables = [table['table'] for table in available_tables]
-        return f"✅ Selected all {len(agent_context.selected_tables)} tables: {', '.join(agent_context.selected_tables)}"
+    # Store the user's selection request for the agent to interpret
+    # The agent will be smart enough to figure out what the user wants
+    agent_context.table_selection_request = table_selection
+    agent_context.selected_tables = table_names  # Default to all tables - let agent decide
     
-    try:
-        # Parse comma-separated numbers
-        indices = [int(x.strip()) for x in table_selection.split(',')]
-        selected_tables = []
-        
-        for i in indices:
-            if 1 <= i <= len(available_tables):
-                selected_tables.append(available_tables[i-1]['table'])
-            else:
-                return f"❌ Invalid table number: {i}. Please use numbers 1-{len(available_tables)}"
-        
-        agent_context.selected_tables = selected_tables
-        return f"✅ Selected {len(selected_tables)} tables: {', '.join(selected_tables)}"
-        
-    except ValueError:
-        return "❌ Invalid selection format. Use 'all' or comma-separated numbers like '1,3,5'"
+    print(f"DEBUG: Stored selection request: '{table_selection}', selected all tables by default")
+    return f"📋 Available tables: {', '.join(table_names)}\n💭 User selection: '{table_selection}'\n✅ Tables ready for selection - let me interpret your request..."
 
 
 def generate_yaml_dictionary_impl(agent_context, output_filename: Optional[str] = None) -> str:
