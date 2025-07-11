@@ -16,11 +16,23 @@ from dataclasses import dataclass
 # Add the project root to the path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Import our function modules
-from src.functions.connection_functions import connect_to_snowflake as connect_func
-from src.functions.metadata_functions import list_databases, list_schemas, list_stages, list_stage_files
-from src.functions.stage_functions import load_stage_file as load_stage_func
-from src.functions.query_functions import generate_sql_only, execute_sql_only, generate_query_summary
+# Import our function tools
+from src.cli.tools import (
+    connect_to_snowflake_impl as connect_tool,
+    get_current_context_impl as context_tool,
+    get_databases_impl as databases_tool,
+    select_database_impl as select_db_tool,
+    get_schemas_impl as schemas_tool,
+    select_schema_impl as select_schema_tool,
+    get_stages_impl as stages_tool,
+    select_stage_impl as select_stage_tool,
+    get_yaml_files_impl as yaml_files_tool,
+    load_yaml_file_impl as load_yaml_tool,
+    get_yaml_content_impl as yaml_content_tool,
+    generate_sql_impl as generate_sql_tool,
+    execute_sql_impl as execute_sql_tool,
+    generate_summary_impl as summary_tool
+)
 
 @dataclass
 class AgentContext:
@@ -42,286 +54,78 @@ agent_context = AgentContext()
 
 # Removed APIClient class - using direct function calls instead
 
-# Tool Functions for Agent SDK
+# Tool Functions for Agent SDK - wrapper functions with agent_context
+# These are simple wrappers that pass agent_context to the actual tool functions
+
 @function_tool
 def connect_to_snowflake() -> str:
     """Connect to Snowflake and establish a connection"""
-    # Check if already connected
-    if agent_context.connection_id:
-        return f"✅ Already connected (Connection ID: {agent_context.connection_id[:8]}...)"
-    
-    result = connect_func()
-    if result["status"] == "success":
-        agent_context.connection_id = result["connection_id"]
-        return f"✅ Connected to {result['account']} as {result['user']} (Connection ID: {result['connection_id'][:8]}...)"
-    else:
-        return f"❌ Connection failed: {result.get('error', 'Unknown error')}"
+    return connect_tool(agent_context)
 
 @function_tool
 def get_databases() -> str:
     """Get list of available databases"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    result = list_databases(agent_context.connection_id)
-    if result["status"] == "success":
-        databases = result["databases"]
-        return f"📊 Found {len(databases)} databases: {', '.join(databases)}"
-    else:
-        return f"❌ Failed to get databases: {result.get('error', 'Unknown error')}"
+    return databases_tool(agent_context)
 
 @function_tool
 def select_database(database_name: str) -> str:
     """Select a specific database to work with"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    # Just set the database - skip verification to avoid duplicate calls
-    agent_context.current_database = database_name
-    return f"✅ Selected database: {database_name}"
+    return select_db_tool(agent_context, database_name)
 
 @function_tool
 def get_schemas(database_name: Optional[str] = None) -> str:
     """Get schemas for a database"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    db_name = database_name or agent_context.current_database
-    if not db_name:
-        return "❌ No database specified. Please select a database first."
-    
-    result = list_schemas(agent_context.connection_id, db_name)
-    if result["status"] == "success":
-        schemas = result["schemas"]
-        return f"📂 Found {len(schemas)} schemas in {db_name}: {', '.join(schemas)}"
-    else:
-        return f"❌ Failed to get schemas: {result.get('error', 'Unknown error')}"
+    return schemas_tool(agent_context, database_name)
 
 @function_tool
 def select_schema(schema_name: str) -> str:
     """Select a specific schema to work with"""
-    if not agent_context.current_database:
-        return "❌ No database selected. Please select a database first."
-    
-    # Just set the schema - skip verification to avoid duplicate calls
-    agent_context.current_schema = schema_name
-    return f"✅ Selected schema: {schema_name}"
+    return select_schema_tool(agent_context, schema_name)
 
 @function_tool
 def get_stages() -> str:
     """Get stages in the current database and schema"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    if not agent_context.current_database or not agent_context.current_schema:
-        return "❌ Database and schema must be selected first."
-    
-    result = list_stages(agent_context.connection_id, agent_context.current_database, agent_context.current_schema)
-    if result["status"] == "success":
-        stages = result["stages"]
-        stage_info = [f"{s['name']} ({s['type']})" for s in stages]
-        return f"📋 Found {len(stages)} stages: {', '.join(stage_info)}"
-    else:
-        return f"❌ Failed to get stages: {result.get('error', 'Unknown error')}"
+    return stages_tool(agent_context)
 
 @function_tool
 def select_stage(stage_name: str) -> str:
     """Select a specific stage to work with"""
-    if not agent_context.current_database or not agent_context.current_schema:
-        return "❌ Database and schema must be selected first."
-    
-    # Just set the stage - skip verification to avoid duplicate calls
-    agent_context.current_stage = f"@{agent_context.current_database}.{agent_context.current_schema}.{stage_name}"
-    return f"✅ Selected stage: {agent_context.current_stage}"
+    return select_stage_tool(agent_context, stage_name)
 
 @function_tool
 def get_yaml_files() -> str:
     """Get YAML files from the current stage"""
-    if not agent_context.current_stage:
-        return "❌ No stage selected. Please select a stage first."
-    
-    result = list_stage_files(agent_context.connection_id, agent_context.current_stage)
-    if result["status"] == "success":
-        files = result["files"]
-        yaml_files = [f for f in files if f["name"].endswith(('.yaml', '.yml'))]
-        if yaml_files:
-            file_info = [f"{f['name'].split('/')[-1]} ({f['size']} bytes)" for f in yaml_files]
-            return f"📄 Found {len(yaml_files)} YAML files: {', '.join(file_info)}"
-        else:
-            return f"❌ No YAML files found. Available files: {[f['name'] for f in files]}"
-    else:
-        return f"❌ Failed to get files: {result.get('error', 'Unknown error')}"
+    return yaml_files_tool(agent_context)
 
 @function_tool
 def load_yaml_file(filename: str) -> str:
     """Load and parse a YAML file from the current stage"""
-    if not agent_context.current_stage:
-        return "❌ No stage selected. Please select a stage first."
-    
-    # Load YAML content
-    result = load_stage_func(agent_context.connection_id, agent_context.current_stage, filename)
-    
-    if result["status"] != "success":
-        return f"❌ Failed to load YAML file: {result.get('error', 'Unknown error')}"
-    
-    yaml_content = result["content"]
-    
-    # Parse YAML
-    try:
-        yaml_data = yaml.safe_load(yaml_content)
-        agent_context.yaml_content = yaml_content
-        agent_context.yaml_data = yaml_data
-        
-        # Extract table information
-        tables = []
-        if "tables" in yaml_data:
-            for table in yaml_data["tables"]:
-                if "base_table" in table:
-                    base_table = table["base_table"]
-                    tables.append({
-                        "name": table.get("name", "Unknown"),
-                        "database": base_table.get("database", ""),
-                        "schema": base_table.get("schema", ""),
-                        "full_name": f"{base_table.get('database', '')}.{base_table.get('schema', '')}.{table.get('name', '')}"
-                    })
-        
-        agent_context.tables = tables
-        
-        # Auto-connect to database and schema from YAML
-        if tables:
-            first_table = tables[0]
-            db_name = first_table.get('database')
-            schema_name = first_table.get('schema')
-            
-            if db_name and db_name != agent_context.current_database:
-                agent_context.current_database = db_name
-                
-            if schema_name and schema_name != agent_context.current_schema:
-                agent_context.current_schema = schema_name
-        
-        return f"✅ Loaded and parsed {filename} ({len(yaml_content)} chars). Found {len(tables)} tables: {[t['name'] for t in tables]}. Auto-connected to database: {agent_context.current_database}, schema: {agent_context.current_schema}"
-        
-    except yaml.YAMLError as e:
-        return f"❌ Failed to parse YAML: {e}"
+    return load_yaml_tool(agent_context, filename)
 
 @function_tool
 def generate_sql(query: str, table_name: Optional[str] = None) -> str:
     """Generate SQL from natural language query"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    if not agent_context.yaml_content:
-        return "❌ No YAML file loaded. Please load a data dictionary first."
-    
-    # Use first table if not specified
-    if not table_name and agent_context.tables:
-        table_name = agent_context.tables[0]['name']
-    
-    if not table_name:
-        return "❌ No table specified and no tables available."
-    
-    result = generate_sql_only(agent_context.connection_id, query, table_name, agent_context.yaml_content)
-    
-    if result["status"] == "error":
-        return f"❌ SQL generation failed: {result['error']}"
-    
-    intent = result.get("intent", "unknown")
-    if intent != "SQL_QUERY":
-        return f"💡 Intent: {intent} - {result.get('message', 'Non-SQL query detected')}"
-    
-    sql = result.get("sql", "")
-    if not sql:
-        return "❌ No SQL generated"
-    
-    return f"✅ Generated SQL: {sql}"
+    return generate_sql_tool(agent_context, query, table_name)
 
 @function_tool
 def execute_sql(sql: str, table_name: Optional[str] = None) -> str:
     """Execute SQL query and return results"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    if not table_name and agent_context.tables:
-        table_name = agent_context.tables[0]['name']
-    
-    result = execute_sql_only(agent_context.connection_id, sql, table_name or "unknown")
-    
-    if result["status"] == "error":
-        return f"❌ SQL execution failed: {result['error']}"
-    
-    if result["status"] == "success":
-        row_count = result.get("row_count", 0)
-        response = f"✅ Query executed successfully! Returned {row_count} rows."
-        
-        if "result" in result and result["result"]:
-            results = result["result"]
-            response += f"\n📋 Sample results (first 3 rows):\n"
-            for i, row in enumerate(results[:3]):
-                row_items = list(row.items())[:3]  # First 3 columns
-                row_display = ", ".join([f"{k}: {v}" for k, v in row_items])
-                response += f"  Row {i+1}: {row_display}\n"
-        
-        return response
-    else:
-        return f"❌ Query execution failed: {result.get('sql_error', 'Unknown error')}"
+    return execute_sql_tool(agent_context, sql, table_name)
 
 @function_tool
 def generate_summary(query: str, sql: str, results: str) -> str:
     """Generate AI summary of query results"""
-    if not agent_context.connection_id:
-        return "❌ No connection established. Please connect first."
-    
-    # Convert results string to list format expected by function
-    try:
-        results_list = eval(results) if isinstance(results, str) else results
-    except:
-        results_list = []
-    
-    result = generate_query_summary(agent_context.connection_id, query, sql, results_list)
-    
-    if result["status"] == "error":
-        return f"❌ Summary generation failed: {result['error']}"
-    
-    if "summary" in result:
-        return f"📝 AI Summary: {result['summary']}"
-    else:
-        return "⚠️ No summary generated"
+    return summary_tool(agent_context, query, sql, results)
 
 @function_tool
 def get_current_context() -> str:
     """Get current agent context and state"""
-    context_info = []
-    
-    if agent_context.connection_id:
-        context_info.append(f"🔗 Connected (ID: {agent_context.connection_id[:8]}...)")
-    else:
-        context_info.append("❌ Not connected")
-    
-    if agent_context.current_database:
-        context_info.append(f"🗄️ Database: {agent_context.current_database}")
-    
-    if agent_context.current_schema:
-        context_info.append(f"📂 Schema: {agent_context.current_schema}")
-    
-    if agent_context.current_stage:
-        context_info.append(f"📋 Stage: {agent_context.current_stage}")
-    
-    if agent_context.yaml_content:
-        context_info.append(f"📄 YAML loaded ({len(agent_context.yaml_content)} chars)")
-    
-    if agent_context.tables:
-        table_names = [t['name'] for t in agent_context.tables]
-        context_info.append(f"📊 Tables: {', '.join(table_names)}")
-    
-    return "\n".join(context_info) if context_info else "No context available"
+    return context_tool(agent_context)
 
 @function_tool
 def get_yaml_content() -> str:
     """Get the loaded YAML data dictionary content for analysis"""
-    if not agent_context.yaml_content:
-        return "❌ No YAML file loaded. Please load a data dictionary first."
-    
-    return f"📄 **YAML Data Dictionary Content:**\n\n{agent_context.yaml_content}"
+    return yaml_content_tool(agent_context)
 
 # Agent Instructions
 AGENT_INSTRUCTIONS = """
