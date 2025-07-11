@@ -8,3 +8,4 @@ uvicorn>=0.23.0
 python-multipart>=0.0.6
 requests>=2.31.0
 protobuf-to-pydantic>=0.2.5
+openai-agents>=1.0.0
