@@ -45,6 +45,20 @@ def connect():
         click.echo(f"❌ Failed: {result}")
 
 @cli.command()
+def disconnect():
+    """Disconnect from Snowflake and clear cached connection"""
+    if not client.connection_id:
+        click.echo("❌ No active connection to disconnect")
+        return
+    
+    result = client.delete(f"/connection/{client.connection_id}")
+    if "status" in result and result["status"] == "success":
+        click.echo(f"✅ Disconnected: {client.connection_id[:8]}...")
+        client.connection_id = None
+    else:
+        click.echo(f"❌ Failed to disconnect: {result}")
+
+@cli.command()
 @click.argument('database')
 @click.argument('schema')
 def list_tables(database, schema):

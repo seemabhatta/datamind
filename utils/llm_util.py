@@ -8,7 +8,9 @@ from dotenv import load_dotenv
 import pandas as pd
 import yaml
 from google.protobuf.json_format import ParseDict
-from utils.schema.semantic_model_pb2 import SemanticModel  
+from utils.schema.semantic_model_pb2 import SemanticModel
+from protobuf_to_pydantic import msg_to_pydantic_model
+from utils.schema.semantic_model_pb2 import SemanticModel as ProtoSemanticModel  
 
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  
@@ -21,6 +23,9 @@ BASE_DIR = pathlib.Path(__file__).parent.resolve()
 llm_model = config.LLM_MODEL
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
+
+# Auto-generate Pydantic model from protobuf schema
+PydanticSemanticModel = msg_to_pydantic_model(ProtoSemanticModel)
 
 
 def call_response_api(llm_model, system_prompt, user_prompt):
@@ -225,3 +230,33 @@ def validate_yaml_with_proto(yaml_str):
         return True, None
     except Exception as e:
         return False, str(e)
+
+def generate_structured_yaml(table_data_prompt):
+    """
+    Generate YAML using OpenAI responses API with structured output.
+    Uses auto-generated Pydantic model from protobuf schema to guarantee valid structure.
+    """
+    try:
+        response = client.responses.parse(
+            model="gpt-4o-mini",
+            input=[
+                {"role": "system", "content": "You are a data dictionary generator. Generate a structured semantic model based on the provided table data."},
+                {"role": "user", "content": table_data_prompt}
+            ],
+            text_format=PydanticSemanticModel
+        )
+        
+        # Convert Pydantic model to YAML
+        semantic_model = response.output_parsed
+        
+        if semantic_model is None:
+            raise Exception("Response output_parsed is None - structured parsing failed")
+            
+        yaml_text = yaml.dump(semantic_model.dict(), sort_keys=False)
+        
+        print(f"DEBUG: Generated structured YAML ({len(yaml_text)} characters)")
+        return yaml_text
+        
+    except Exception as e:
+        print(f"ERROR: Failed to generate structured YAML: {e}")
+        raise Exception(f"Structured YAML generation failed: {str(e)}")
