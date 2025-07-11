@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
 from ..models.api_models import TableInfo, StageFileInfo
-from ..utils.connection_utils import get_snowflake_connection
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+from src.core.connection_utils import get_snowflake_connection
 
 router = APIRouter()
 

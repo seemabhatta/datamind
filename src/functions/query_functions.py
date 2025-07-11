@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from utils import llm_util
 import config
 
-from src.api.utils.connection_utils import get_snowflake_connection, get_connection
+from src.core.connection_utils import get_snowflake_connection, get_connection
 
 
 def process_nl_query(connection_id: str, query: str, table_name: str, dictionary_content: str):

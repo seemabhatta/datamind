@@ -14,7 +14,10 @@ from .routers.stage_router import router as stage_router
 # app.include_router(unused_router, tags=["unused"])
 
 # Import connection utilities for health check
-from .utils.connection_utils import get_active_connections_count
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from src.core.connection_utils import get_active_connections_count
 
 app = FastAPI(title="Snowflake Cortex Analyst API", description="Modular API for Snowflake-native NL2SQL")
 

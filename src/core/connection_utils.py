@@ -2,7 +2,6 @@ import os
 import uuid
 from typing import Dict, Any, Optional
 import snowflake.connector
-from fastapi import HTTPException
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -18,7 +17,7 @@ def get_connection(connection_id: str) -> Optional[Dict[str, Any]]:
 def get_snowflake_connection(connection_id: str):
     """Get the actual Snowflake connection object, with error handling"""
     if connection_id not in snowflake_connections:
-        raise HTTPException(status_code=404, detail="Connection not found")
+        raise Exception("Connection not found")
     
     return snowflake_connections[connection_id]["connection"]
 
@@ -46,10 +45,7 @@ def create_snowflake_connection():
     
     # Validate required parameters
     if not all([conn_params["account"], conn_params["user"], conn_params["password"]]):
-        raise HTTPException(
-            status_code=400, 
-            detail="Missing required Snowflake credentials in environment variables"
-        )
+        raise Exception("Missing required Snowflake credentials in environment variables")
     
     # Remove None values
     conn_params = {k: v for k, v in conn_params.items() if v is not None}

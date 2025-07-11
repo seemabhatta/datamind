@@ -1,22 +1,22 @@
+"""
+Dictionary functions - Core logic extracted from dictionary_router.py
+"""
+
 import sys
 import os
 import yaml
 from pathlib import Path as PathlibPath
-from fastapi import APIRouter, HTTPException
+from typing import List, Dict, Any
 import pandas as pd
 
 # Add the project root to the path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from utils import llm_util
 
-from ..models.api_models import DataDictionaryRequest, TableSelectionRequest
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from src.core.connection_utils import get_snowflake_connection, get_connection
 
-router = APIRouter()
 
-@router.post("/connection/{connection_id}/analyze-tables")
-async def analyze_tables(connection_id: str, request: TableSelectionRequest):
+def analyze_tables(connection_id: str, tables: List[str]):
     """Analyze selected tables and generate sample data for data dictionary creation"""
     try:
         conn = get_snowflake_connection(connection_id)
@@ -26,7 +26,7 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
         
         table_analysis = {}
         
-        for table_name in request.tables:
+        for table_name in tables:
             print(f"DEBUG: Analyzing table {table_name}")
             
             # Construct full table name if needed
@@ -43,27 +43,23 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
                 schema_info = cursor.fetchall()
                 print(f"DEBUG: Found {len(schema_info)} columns")
                 
-                # Get sample data
+                # Get sample data - use cursor instead of pandas to avoid SQLAlchemy warning
                 print(f"DEBUG: Getting sample data from {full_table_name}")
                 sample_sql = f"SELECT * FROM {full_table_name} LIMIT 10"
-                sample_df = pd.read_sql_query(sample_sql, conn)
-                print(f"DEBUG: Got {len(sample_df)} sample rows")
+                cursor.execute(sample_sql)
+                sample_rows = cursor.fetchall()
+                sample_columns = [desc[0] for desc in cursor.description]
+                print(f"DEBUG: Got {len(sample_rows)} sample rows")
+                
+                # Convert to DataFrame for easier processing
+                sample_df = pd.DataFrame(sample_rows, columns=sample_columns)
                 
                 # Get table statistics
                 print(f"DEBUG: Getting row count for {full_table_name}")
                 stats_sql = f"SELECT COUNT(*) as row_count FROM {full_table_name}"
-                stats_df = pd.read_sql_query(stats_sql, conn)
-                print(f"DEBUG: Stats columns: {list(stats_df.columns)}")
-                # Handle case sensitivity - try both uppercase and lowercase
-                if 'ROW_COUNT' in stats_df.columns:
-                    row_count_raw = stats_df.iloc[0]['ROW_COUNT']
-                elif 'row_count' in stats_df.columns:
-                    row_count_raw = stats_df.iloc[0]['row_count']
-                else:
-                    row_count_raw = stats_df.iloc[0, 0]  # First column
-                
-                # Convert numpy type to native Python int
-                row_count = int(row_count_raw) if pd.notna(row_count_raw) else 0
+                cursor.execute(stats_sql)
+                row_count_result = cursor.fetchone()
+                row_count = int(row_count_result[0]) if row_count_result else 0
                 print(f"DEBUG: Row count: {row_count}")
                 
                 # Analyze each column
@@ -85,10 +81,14 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
                                 COUNT(DISTINCT {col_name}) as distinct_count
                             FROM {full_table_name}
                             """
-                            col_stats_df = pd.read_sql_query(col_stats_sql, conn)
-                            col_stats_raw = col_stats_df.iloc[0].to_dict()
-                            # Convert numpy types to native Python types for JSON serialization
-                            col_stats = {k: float(v) if pd.notna(v) and str(type(v)).startswith('<class \'numpy.') else v for k, v in col_stats_raw.items()}
+                            cursor.execute(col_stats_sql)
+                            col_stats_result = cursor.fetchone()
+                            col_stats = {
+                                "min_val": float(col_stats_result[0]) if col_stats_result[0] is not None else None,
+                                "max_val": float(col_stats_result[1]) if col_stats_result[1] is not None else None,
+                                "avg_val": float(col_stats_result[2]) if col_stats_result[2] is not None else None,
+                                "distinct_count": int(col_stats_result[3]) if col_stats_result[3] is not None else None
+                            }
                             print(f"DEBUG: Numeric stats for {col_name}: {col_stats}")
                         except Exception as col_error:
                             print(f"DEBUG: Error getting numeric stats for {col_name}: {col_error}")
@@ -103,10 +103,12 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
                                 COUNT({col_name}) as non_null_count
                             FROM {full_table_name}
                             """
-                            col_stats_df = pd.read_sql_query(col_stats_sql, conn)
-                            col_stats_raw = col_stats_df.iloc[0].to_dict()
-                            # Convert numpy types to native Python types for JSON serialization
-                            col_stats = {k: int(v) if pd.notna(v) and str(type(v)).startswith('<class \'numpy.') else v for k, v in col_stats_raw.items()}
+                            cursor.execute(col_stats_sql)
+                            col_stats_result = cursor.fetchone()
+                            col_stats = {
+                                "distinct_count": int(col_stats_result[0]) if col_stats_result[0] is not None else None,
+                                "non_null_count": int(col_stats_result[1]) if col_stats_result[1] is not None else None
+                            }
                             print(f"DEBUG: String stats for {col_name}: {col_stats}")
                         except Exception as col_error:
                             print(f"DEBUG: Error getting string stats for {col_name}: {col_error}")
@@ -172,26 +174,28 @@ async def analyze_tables(connection_id: str, request: TableSelectionRequest):
             "connection_id": connection_id,
             "database": database,
             "schema": schema,
-            "tables_analyzed": len(request.tables),
+            "tables_analyzed": len(tables),
             "analysis": table_analysis
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error analyzing tables: {str(e)}")
+        return {
+            "status": "error",
+            "error": f"Error analyzing tables: {str(e)}"
+        }
 
-@router.post("/connection/{connection_id}/generate-data-dictionary")
-async def generate_data_dictionary(connection_id: str, request: DataDictionaryRequest):
+
+def generate_data_dictionary(connection_id: str, tables: List[str], database_name: str, schema_name: str):
     """Generate YAML data dictionary from analyzed table data using LLM"""
     try:
         # First analyze the tables
-        table_request = TableSelectionRequest(
-            connection_id=connection_id,
-            tables=request.tables
-        )
-        analysis_result = await analyze_tables(connection_id, table_request)
+        analysis_result = analyze_tables(connection_id, tables)
         
         if analysis_result["status"] != "success":
-            raise HTTPException(status_code=500, detail="Failed to analyze tables")
+            return {
+                "status": "error",
+                "error": "Failed to analyze tables"
+            }
         
         # Prepare data for LLM processing
         table_analysis = analysis_result["analysis"]
@@ -205,7 +209,7 @@ async def generate_data_dictionary(connection_id: str, request: DataDictionaryRe
             
             # Create table information for the prompt
             table_prompt_info = f"\nTable: {table_name}\n"
-            table_prompt_info += f"Full Name: {table_info.get('full_name', f'{request.database_name}.{request.schema_name}.{table_name}')}\n"
+            table_prompt_info += f"Full Name: {table_info.get('full_name', f'{database_name}.{schema_name}.{table_name}')}\n"
             table_prompt_info += f"Row Count: {table_info.get('row_count', 'Unknown')}\n"
             table_prompt_info += "Columns:\n"
             
@@ -246,7 +250,7 @@ async def generate_data_dictionary(connection_id: str, request: DataDictionaryRe
             
             # Create user prompt for multiple tables using the correct protobuf schema structure
             user_prompt = f"""
-Here are the details for {len(all_tables_info)} database tables from {request.database_name}.{request.schema_name}:
+Here are the details for {len(all_tables_info)} database tables from {database_name}.{schema_name}:
 
 {tables_description}
 
@@ -256,8 +260,8 @@ tables:
   - name: "TABLE_NAME"
     description: "Concise business description of table purpose (max 15 words)"
     base_table:
-      database: "{request.database_name}"
-      schema: "{request.schema_name}"
+      database: "{database_name}"
+      schema: "{schema_name}"
       table: "TABLE_NAME"
     dimensions:
       - name: "COLUMN_NAME"
@@ -282,7 +286,7 @@ CRITICAL REQUIREMENTS:
 5. Set dataType to: varchar, number, date, timestamp, boolean, etc. (based on the column type shown)
 6. Use the exact field names: name, description, expr, dataType, unique, sampleValues
 7. Do NOT use "category" or "fields" - they are not valid
-8. ALWAYS use database: "{request.database_name}" and schema: "{request.schema_name}" for ALL tables
+8. ALWAYS use database: "{database_name}" and schema: "{schema_name}" for ALL tables
 9. The "expr" field should always be the same as the column name
 10. Include sample values from the data provided
 
@@ -367,9 +371,9 @@ VERIFICATION CHECKLIST - Ensure your YAML includes:
             return {
                 "status": "success",
                 "connection_id": connection_id,
-                "database": request.database_name,
-                "schema": request.schema_name,
-                "tables": request.tables,
+                "database": database_name,
+                "schema": schema_name,
+                "tables": tables,
                 "yaml_dictionary": yaml_text,
                 "parsed_dictionary": parsed_yaml,
                 "validation_status": "valid" if is_valid else "invalid",
@@ -378,8 +382,14 @@ VERIFICATION CHECKLIST - Ensure your YAML includes:
             }
             
         else:
-            raise HTTPException(status_code=400, detail="No valid table data found to generate dictionary")
+            return {
+                "status": "error",
+                "error": "No valid table data found to generate dictionary"
+            }
         
     except Exception as e:
         print(f"DEBUG: Error generating data dictionary: {e}")
-        raise HTTPException(status_code=500, detail=f"Error generating data dictionary: {str(e)}")
+        return {
+            "status": "error",
+            "error": f"Error generating data dictionary: {str(e)}"
+        }

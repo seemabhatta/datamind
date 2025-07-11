@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from ..models.api_models import SnowflakeConnectionResponse
-from ..utils.connection_utils import (
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+
+from src.core.connection_utils import (
     create_snowflake_connection, 
     get_connection, 
     get_snowflake_connection,

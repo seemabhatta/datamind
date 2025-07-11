@@ -12,7 +12,8 @@ from utils import llm_util
 import config
 
 from ..models.api_models import QueryRequest, ExecuteSQLRequest, SummaryRequest
-from ..utils.connection_utils import get_snowflake_connection, get_connection
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+from src.core.connection_utils import get_snowflake_connection, get_connection
 
 router = APIRouter()
 

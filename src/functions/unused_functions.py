@@ -1,31 +1,23 @@
 """
-Unused API endpoints - preserved for future use
-These endpoints are not currently used by any CLI applications but may be useful later.
-
-To reactivate any of these endpoints:
-1. Import this router in the main snowflake_api.py
-2. Add: app.include_router(unused_router, tags=["unused"])
+Unused functions - Core logic extracted from unused_router.py
+These functions are preserved for future use but are not currently used by any CLI applications.
 """
 
 import sys
 import os
 from pathlib import Path as PathlibPath
-from fastapi import APIRouter, HTTPException, Body
 from typing import Optional
 import pandas as pd
 
 # Add the project root to the path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from utils import llm_util
 
-from ..models.api_models import QueryRequest
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
-from src.core.connection_utils import get_snowflake_connection, get_connection
+from src.core.connection_utils import get_snowflake_connection, get_connection, remove_connection
+from src.functions.query_functions import process_nl_query
 
-router = APIRouter()
 
-@router.get("/connection/{connection_id}/status")
-async def check_connection_status(connection_id: str):
+def check_connection_status(connection_id: str):
     """
     Check if connection is still active
     
@@ -35,7 +27,10 @@ async def check_connection_status(connection_id: str):
     """
     connection_data = get_connection(connection_id)
     if not connection_data:
-        raise HTTPException(status_code=404, detail="Connection not found")
+        return {
+            "status": "error",
+            "error": "Connection not found"
+        }
     
     try:
         conn = connection_data["connection"]
@@ -52,12 +47,14 @@ async def check_connection_status(connection_id: str):
         }
     except Exception as e:
         # Clean up dead connection
-        from src.core.connection_utils import remove_connection
         remove_connection(connection_id)
-        raise HTTPException(status_code=400, detail=f"Connection dead: {str(e)}")
+        return {
+            "status": "error",
+            "error": f"Connection dead: {str(e)}"
+        }
 
-@router.post("/connection/{connection_id}/nl2sql-execute")
-async def nl2sql_and_execute(connection_id: str, request: QueryRequest):
+
+def nl2sql_and_execute(connection_id: str, query: str, table_name: str, dictionary_content: str):
     """
     Complete NL2SQL pipeline: Process natural language → Generate SQL → Execute → Return results
     
@@ -66,9 +63,8 @@ async def nl2sql_and_execute(connection_id: str, request: QueryRequest):
     POTENTIAL USE: Single-step NL2SQL execution for simple applications
     """
     try:
-        # Use the existing query endpoint to process NL2SQL
-        from routers.query_router import process_nl_query
-        query_result = await process_nl_query(connection_id, request)
+        # Use the existing query function to process NL2SQL
+        query_result = process_nl_query(connection_id, query, table_name, dictionary_content)
         
         # If SQL was successfully generated and executed, return the complete result
         if query_result.get("execution_status") == "success":
@@ -83,14 +79,13 @@ async def nl2sql_and_execute(connection_id: str, request: QueryRequest):
             return query_result
             
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in NL2SQL pipeline: {str(e)}")
+        return {
+            "status": "error",
+            "error": f"Error in NL2SQL pipeline: {str(e)}"
+        }
 
-@router.post("/connection/{connection_id}/execute-sql-simple")
-async def execute_sql_simple(
-    connection_id: str,
-    sql: str = Body(...),
-    limit: Optional[int] = Body(1000, description="Row limit for results")
-):
+
+def execute_sql_simple(connection_id: str, sql: str, limit: Optional[int] = 1000):
     """
     Execute SQL query on Snowflake (simple version)
     
@@ -105,12 +100,15 @@ async def execute_sql_simple(
         if limit and "LIMIT" not in sql.upper():
             sql = f"{sql.rstrip(';')} LIMIT {limit}"
         
-        # Execute query
-        df = pd.read_sql_query(sql, conn)
+        # Execute query using cursor instead of pandas to avoid SQLAlchemy warning
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        cursor.close()
         
-        # Convert to JSON
-        result = df.to_dict(orient="records")
-        columns = list(df.columns)
+        # Convert to list of dictionaries
+        result = [dict(zip(columns, row)) for row in rows]
         
         return {
             "status": "success",
@@ -120,7 +118,7 @@ async def execute_sql_simple(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error executing SQL: {str(e)}")
-
-# Note: analyze_tables() is moved to dictionary_router.py since it's used by generate_data_dictionary()
-# Note: health_check() is moved to main API file as it's a core endpoint
+        return {
+            "status": "error",
+            "error": f"Error executing SQL: {str(e)}"
+        }
