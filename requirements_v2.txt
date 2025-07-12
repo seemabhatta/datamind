@@ -1,0 +1,54 @@
+# NL2SQL CLI v2 Requirements
+# Modern Multi-Agent Architecture with MCP Integration
+
+# Core Framework
+click>=8.1.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Async Support
+asyncio-dgram>=2.1.2
+aiofiles>=23.2.1
+
+# MCP (Model Context Protocol) - Official SDK
+mcp>=1.0.0
+
+# Existing MCP Servers
+# We'll use isaacwasserman/mcp-snowflake-server via uvx
+# Install with: uvx mcp_snowflake_server
+
+# LLM Integration
+openai>=1.12.0
+anthropic>=0.8.0
+
+# Database Connectivity
+snowflake-connector-python>=3.6.0
+sqlalchemy>=2.0.0
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.24.0
+pyyaml>=6.0.1
+
+# Logging and Monitoring
+structlog>=23.2.0
+rich>=13.7.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+
+# Development and Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.12.0
+black>=23.12.0
+isort>=5.13.0
+mypy>=1.8.0
+
+# Optional: Enhanced CLI Features
+prompt-toolkit>=3.0.43
+colorama>=0.4.6
+
+# Security
+cryptography>=41.0.0
+python-jose>=3.3.0
