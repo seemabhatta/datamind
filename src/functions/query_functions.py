@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from utils import llm_util
 import config
 
-from src.api.utils.connection_utils import get_snowflake_connection, get_connection
+from src.core.connection_utils import get_snowflake_connection, get_connection
 
 
 def process_nl_query(connection_id: str, query: str, table_name: str, dictionary_content: str):
@@ -58,8 +58,13 @@ def process_nl_query(connection_id: str, query: str, table_name: str, dictionary
                 
                 # Get sample data from Snowflake table (equivalent to CSV sample data)
                 sample_sql = f"SELECT * FROM {full_table_name} LIMIT 5"
-                sample_df = pd.read_sql_query(sample_sql, conn)
+                cursor = conn.cursor()
+                cursor.execute(sample_sql)
+                sample_rows = cursor.fetchall()
+                sample_columns = [desc[0] for desc in cursor.description]
+                sample_df = pd.DataFrame(sample_rows, columns=sample_columns)
                 sample_data = sample_df.to_string(max_rows=5)
+                cursor.close()
                 
                 # Build comprehensive prompt like create_nl2sqlchat_pompt() does
                 enriched_prompt = f"""
@@ -118,7 +123,12 @@ def process_nl_query(connection_id: str, query: str, table_name: str, dictionary
                 sql_cleaned = f"{sql_cleaned.rstrip(';')} LIMIT 100"
             
             # Execute on Snowflake
-            df = pd.read_sql_query(sql_cleaned, conn)
+            cursor = conn.cursor()
+            cursor.execute(sql_cleaned)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            df = pd.DataFrame(rows, columns=columns)
+            cursor.close()
             
             # Convert results to JSON
             result = df.to_dict(orient="records")
@@ -197,8 +207,13 @@ def generate_sql_only(connection_id: str, query: str, table_name: str, dictionar
             
             # Get sample data from Snowflake table
             sample_sql = f"SELECT * FROM {full_table_name} LIMIT 5"
-            sample_df = pd.read_sql_query(sample_sql, conn)
+            cursor = conn.cursor()
+            cursor.execute(sample_sql)
+            sample_rows = cursor.fetchall()
+            sample_columns = [desc[0] for desc in cursor.description]
+            sample_df = pd.DataFrame(sample_rows, columns=sample_columns)
             sample_data = sample_df.to_string(max_rows=5)
+            cursor.close()
             
             # Build comprehensive prompt
             enriched_prompt = f"""
@@ -262,8 +277,13 @@ def execute_sql_only(connection_id: str, sql: str, table_name: str):
         
         print(f"DEBUG: Executing SQL: {sql}")
         
-        # Execute SQL using pandas
-        df = pd.read_sql_query(sql, conn)
+        # Execute SQL using cursor
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        df = pd.DataFrame(rows, columns=columns)
+        cursor.close()
         
         # Convert to JSON-serializable format
         result = df.to_dict(orient="records")
