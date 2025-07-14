@@ -1,8 +1,8 @@
-# AI-Native Data Discovery & Analytics Platform
+# DataMind: AI-Native Data Intelligence Platform
 
-> **🚀 Transforming Data Interaction with Generative AI**
+> **🧠 The Mind of Your Data Organization**
 
-A comprehensive AI-driven platform that revolutionizes how organizations discover, document, analyze, and govern their data assets. Built with generative AI at its core, this platform transforms traditional data workflows into intelligent, automated experiences.
+DataMind is a revolutionary AI-driven platform that transforms how organizations discover, document, analyze, and govern their data assets. Built with generative AI at its core, DataMind evolves traditional data workflows into intelligent, automated experiences that think ahead of your needs.
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![OpenAI](https://img.shields.io/badge/AI-OpenAI%20GPT--4-green.svg)](https://openai.com/)
@@ -206,7 +206,7 @@ Enable intelligent collaboration and platform extensibility.
 ### System Overview
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    AI-Native Data Platform                  │
+│                         DataMind                            │
 ├─────────────────┬─────────────────┬─────────────────────────┤
 │   Discovery     │  Documentation  │    Analytics Engine     │
 │   • Semantic    │  • AI-Generated │    • Conversational     │
@@ -264,7 +264,7 @@ Enable intelligent collaboration and platform extensibility.
 1. **Clone and Setup**
 ```bash
 git clone <repository-url>
-cd nl2sqlchat
+cd datamind
 pip install -r requirements.txt
 ```
 
@@ -361,7 +361,7 @@ uvicorn src.api.nl2sql_api:app --reload --port 8001
 
 ### Project Structure
 ```
-ai-data-platform/
+datamind/
 ├── src/
 │   ├── agents/                 # AI Agent implementations
 │   │   ├── discovery/         # Phase 1: Asset discovery agents
@@ -545,13 +545,13 @@ helm install monitoring deployment/helm/monitoring/
 ## 🤝 Community & Support
 
 ### Getting Help
-- 📚 **Documentation**: [docs.ai-data-platform.com](https://docs.ai-data-platform.com)
-- 💬 **Community Forum**: [community.ai-data-platform.com](https://community.ai-data-platform.com)
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/org/ai-data-platform/issues)
-- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/org/ai-data-platform/discussions)
+- 📚 **Documentation**: [docs.datamind.ai](https://docs.datamind.ai)
+- 💬 **Community Forum**: [community.datamind.ai](https://community.datamind.ai)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/org/datamind/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/org/datamind/discussions)
 
 ### Enterprise Support
-- 🏢 **Enterprise License**: Contact sales@ai-data-platform.com
+- 🏢 **Enterprise License**: Contact sales@datamind.ai
 - 🛠️ **Professional Services**: Implementation and training
 - 📞 **24/7 Support**: Premium support packages available
 - 🎓 **Training Programs**: Certification and workshops
@@ -576,4 +576,4 @@ Built with cutting-edge AI technologies:
 
 *Transform your data organization with AI. Start your journey today.*
 
-**[🚀 Get Started](#-quick-start) | [📖 Documentation](docs/) | [🤝 Community](#-community--support)**
+**[🚀 Get Started](#-quick-start) | [📖 Documentation](https://docs.datamind.ai) | [🤝 Community](https://community.datamind.ai)**
