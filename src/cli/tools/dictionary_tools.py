@@ -73,13 +73,44 @@ def select_tables_impl(agent_context, table_selection: str) -> str:
     table_names = [table['table'] for table in available_tables]
     print(f"DEBUG: Available tables: {table_names}")
     
-    # Store the user's selection request for the agent to interpret
-    # The agent will be smart enough to figure out what the user wants
-    agent_context.table_selection_request = table_selection
-    agent_context.selected_tables = table_names  # Default to all tables - let agent decide
+    # Parse the user's selection
+    selected_tables = []
     
-    print(f"DEBUG: Stored selection request: '{table_selection}', selected all tables by default")
-    return f"📋 Available tables: {', '.join(table_names)}\n💭 User selection: '{table_selection}'\n✅ Tables ready for selection - let me interpret your request..."
+    # Handle different input formats
+    if table_selection.lower() in ['all', '*']:
+        selected_tables = table_names
+    elif table_selection.isdigit():
+        # Single number selection (1-indexed)
+        index = int(table_selection) - 1
+        if 0 <= index < len(table_names):
+            selected_tables = [table_names[index]]
+        else:
+            return f"❌ Invalid table number. Please select between 1 and {len(table_names)}"
+    elif ',' in table_selection:
+        # Multiple selections (comma-separated numbers or names)
+        selections = [s.strip() for s in table_selection.split(',')]
+        for selection in selections:
+            if selection.isdigit():
+                index = int(selection) - 1
+                if 0 <= index < len(table_names):
+                    selected_tables.append(table_names[index])
+                else:
+                    return f"❌ Invalid table number: {selection}. Please select between 1 and {len(table_names)}"
+            elif selection in table_names:
+                selected_tables.append(selection)
+            else:
+                return f"❌ Table '{selection}' not found in available tables"
+    elif table_selection in table_names:
+        # Direct table name match
+        selected_tables = [table_selection]
+    else:
+        return f"❌ Invalid selection '{table_selection}'. Use table numbers (1,2,3), names, or 'all'"
+    
+    agent_context.table_selection_request = table_selection
+    agent_context.selected_tables = selected_tables
+    
+    print(f"DEBUG: Parsed selection '{table_selection}' to tables: {selected_tables}")
+    return f"✅ Selected {len(selected_tables)} table(s): {', '.join(selected_tables)}"
 
 
 def generate_yaml_dictionary_impl(agent_context, output_filename: Optional[str] = None) -> str:
@@ -141,10 +172,16 @@ def upload_to_stage_impl(agent_context, stage_name: str, filename: str) -> str:
     if not hasattr(agent_context, 'dictionary_content') or not agent_context.dictionary_content:
         return "❌ No dictionary content available. Please generate a dictionary first."
     
+    if not agent_context.current_database or not agent_context.current_schema:
+        return "❌ Database and schema must be selected first."
+    
+    # Qualify the stage name with database and schema
+    qualified_stage_name = f"@{agent_context.current_database}.{agent_context.current_schema}.{stage_name}"
+    
     try:
         result = save_dictionary_to_stage(
             agent_context.connection_id,
-            stage_name,
+            qualified_stage_name,
             filename,
             agent_context.dictionary_content
         )

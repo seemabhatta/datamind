@@ -10,7 +10,7 @@ import yaml
 import os
 import sys
 from typing import Optional, Dict, Any, List
-from agents import Agent, Runner, function_tool
+from agents import Agent, Runner, function_tool, SQLiteSession
 from dataclasses import dataclass
 
 # Add the project root to the path for imports
@@ -250,7 +250,8 @@ def cli():
 
 @cli.command()
 @click.option('--query', '-q', help='Initial query to process')
-def agent(query):
+@click.option('--session-id', '-s', help='Session ID for conversation memory (default: auto-generated)')
+def agent(query, session_id):
     """Start the agentic query session"""
     click.echo("🤖 Agentic Snowflake Query Assistant")
     click.echo("=" * 50)
@@ -259,17 +260,25 @@ def agent(query):
     click.echo("🔧 Type 'quit', 'exit', or press Ctrl+C to stop")
     click.echo("=" * 50)
     
+    # Create session for conversation memory
+    if not session_id:
+        import time
+        session_id = f"query_session_{int(time.time())}"
+    
+    session = SQLiteSession(session_id)
+    click.echo(f"📝 Session ID: {session_id}")
+    
     # Auto-initialize the system
     click.echo("\n🔄 Initializing system...")
     initialization_prompt = "Please connect to Snowflake, navigate to the available databases and schemas, find the stage with YAML files, and show me the available YAML data dictionaries so I can select one to work with."
     
-    result = Runner.run_sync(snowflake_agent, initialization_prompt)
+    result = Runner.run_sync(snowflake_agent, initialization_prompt, session=session)
     click.echo(f"🤖 Assistant: {result.final_output}")
     
     # Start with initial query if provided
     if query:
         click.echo(f"\n👤 User: {query}")
-        result = Runner.run_sync(snowflake_agent, query)
+        result = Runner.run_sync(snowflake_agent, query, session=session)
         click.echo(f"🤖 Assistant: {result.final_output}")
     
     # Interactive loop
@@ -286,7 +295,7 @@ def agent(query):
                 continue
             
             click.echo(f"🤖 Assistant: ", nl=False)
-            result = Runner.run_sync(snowflake_agent, user_input)
+            result = Runner.run_sync(snowflake_agent, user_input, session=session)
             click.echo(result.final_output)
             
         except click.Abort:
