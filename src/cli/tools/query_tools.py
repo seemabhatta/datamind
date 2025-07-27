@@ -60,6 +60,13 @@ def execute_sql_impl(agent_context, sql: str, table_name: Optional[str] = None) 
     
     if result["status"] == "success":
         row_count = result.get("row_count", 0)
+        
+        # Store full results in agent context for visualization
+        if "result" in result and result["result"]:
+            agent_context.last_query_results = result["result"]
+            agent_context.last_query_columns = result.get("columns", [])
+            agent_context.last_query_sql = sql
+        
         response = f"✅ Query executed successfully! Returned {row_count} rows."
         
         if "result" in result and result["result"]:
@@ -69,6 +76,9 @@ def execute_sql_impl(agent_context, sql: str, table_name: Optional[str] = None) 
                 row_items = list(row.items())[:3]  # First 3 columns
                 row_display = ", ".join([f"{k}: {v}" for k, v in row_items])
                 response += f"  Row {i+1}: {row_display}\n"
+            
+            # Add visualization hint
+            response += f"\n💡 You can now create visualizations with: 'create a chart' or 'suggest visualizations'"
         
         return response
     else:

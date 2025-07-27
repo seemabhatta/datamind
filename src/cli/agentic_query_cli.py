@@ -34,6 +34,11 @@ from src.cli.tools import (
     generate_summary_impl as summary_tool
 )
 
+from src.cli.tools.visualization_tools import (
+    visualize_data_impl as visualize_tool,
+    get_visualization_suggestions_impl as viz_suggestions_tool
+)
+
 @dataclass
 class AgentContext:
     """Stores agent context and state"""
@@ -44,6 +49,9 @@ class AgentContext:
     yaml_content: Optional[str] = None
     yaml_data: Optional[Dict] = None
     tables: List[Dict] = None
+    last_query_results: Optional[List[Dict]] = None
+    last_query_columns: Optional[List[str]] = None
+    last_query_sql: Optional[str] = None
     
     def __post_init__(self):
         if self.tables is None:
@@ -127,6 +135,16 @@ def get_yaml_content() -> str:
     """Get the loaded YAML data dictionary content for analysis"""
     return yaml_content_tool(agent_context)
 
+@function_tool
+def visualize_data(user_request: str = "create a chart") -> str:
+    """Create LLM-powered visualizations from query results. Describe what kind of chart you want."""
+    return visualize_tool(agent_context, user_request)
+
+@function_tool
+def get_visualization_suggestions() -> str:
+    """Get LLM-powered suggestions for visualizing the current query results"""
+    return viz_suggestions_tool(agent_context)
+
 # Agent Instructions
 AGENT_INSTRUCTIONS = """
 You are a Snowflake Query Assistant that helps users interact with their Snowflake data using natural language.
@@ -138,6 +156,8 @@ Your capabilities:
 4. Convert natural language queries to SQL
 5. Execute SQL queries and show results
 6. Generate AI summaries of query results
+7. Create LLM-powered interactive visualizations from query results
+8. Provide intelligent visualization suggestions based on data analysis
 
 IMPORTANT BEHAVIORAL GUIDELINES:
 - Always consider the context of your previous message when interpreting user responses
@@ -216,6 +236,32 @@ Assistant: [calls generate_sql() immediately, then execute_sql()]
 User: "What's the average loan amount?"
 Assistant: [calls generate_sql() immediately, then execute_sql()]
 
+VISUALIZATION CAPABILITIES:
+After executing queries, you can create visualizations:
+
+User: "Show me a chart of this data"
+Assistant: [calls visualize_data() with user request to create LLM-powered chart]
+
+User: "What charts would work best for this data?"  
+Assistant: [calls get_visualization_suggestions() to get LLM analysis and recommendations]
+
+User: "Create a bar chart showing sales by region"
+Assistant: [calls visualize_data("Create a bar chart showing sales by region")]
+
+The LLM will:
+- Analyze the data structure automatically
+- Choose the most appropriate chart type
+- Generate interactive plotly charts
+- Provide explanations for visualization choices
+- Create charts that open in the user's browser
+
+VISUALIZATION WORKFLOW:
+1. User runs a query (data gets stored automatically)
+2. User requests visualization ("create a chart", "show me graphs", etc.)
+3. You call visualize_data() with their request
+4. LLM analyzes data and generates appropriate chart code
+5. Interactive chart opens in browser
+
 Do NOT ask for clarification or suggest loading different files if you have data that can answer the question.
 
 Use the available tools to help users accomplish their goals efficiently.
@@ -239,7 +285,9 @@ snowflake_agent = Agent(
         execute_sql,
         generate_summary,
         get_current_context,
-        get_yaml_content
+        get_yaml_content,
+        visualize_data,
+        get_visualization_suggestions
     ]
 )
 
