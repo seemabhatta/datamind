@@ -10,7 +10,7 @@ import yaml
 import os
 import sys
 from typing import Optional, Dict, Any, List
-from agents import Agent, Runner, function_tool
+from agents import Agent, Runner, function_tool, SQLiteSession
 from dataclasses import dataclass
 
 # Add the project root to the path for imports
@@ -267,6 +267,9 @@ def agent(database, schema, tables):
     click.echo("🔧 Type 'quit', 'exit', or press Ctrl+C to stop")
     click.echo("=" * 50)
     
+    # Create persistent session for conversation history
+    session = SQLiteSession("dictionary_session")
+    
     # Build initialization prompt based on provided options
     if database and schema and tables:
         initialization_prompt = f"Please connect to Snowflake, select database '{database}', schema '{schema}', and generate a dictionary for tables: {tables}"
@@ -279,7 +282,7 @@ def agent(database, schema, tables):
     
     # Auto-initialize the system
     click.echo("\n🔄 Initializing system...")
-    result = Runner.run_sync(dictionary_agent, initialization_prompt)
+    result = Runner.run_sync(dictionary_agent, initialization_prompt, session=session)
     click.echo(f"🤖 Assistant: {result.final_output}")
     
     # Interactive loop
@@ -296,7 +299,7 @@ def agent(database, schema, tables):
                 continue
             
             click.echo(f"🤖 Assistant: ", nl=False)
-            result = Runner.run_sync(dictionary_agent, user_input)
+            result = Runner.run_sync(dictionary_agent, user_input, session=session)
             click.echo(result.final_output)
             
         except click.Abort:
