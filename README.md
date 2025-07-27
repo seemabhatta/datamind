@@ -146,3 +146,86 @@
   * Use KG as context provider for LLMs or agents
   * Enable structured query generation (Cypher/SPARQL)
 
+---
+
+## 🚀 **Getting Started**
+
+### Prerequisites
+
+- Python 3.8+
+- Snowflake account with appropriate permissions
+- OpenAI API key
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd nl2sqlchat
+   ```
+
+2. **Create and activate virtual environment:**
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up environment variables:**
+   Create a `.env` file with your credentials:
+   ```env
+   OPENAI_API_KEY=your_openai_api_key
+   SNOWFLAKE_USER=your_snowflake_user
+   SNOWFLAKE_PASSWORD=your_snowflake_password
+   SNOWFLAKE_ACCOUNT=your_snowflake_account
+   SNOWFLAKE_WAREHOUSE=your_warehouse
+   ```
+
+### Usage
+
+The system provides multiple interfaces for different use cases:
+
+#### 1. Agentic Query Interface (Recommended)
+Interactive AI agent for natural language querying with session memory:
+```bash
+python src/cli/agentic_query_cli.py agent
+# Or with custom session ID:
+python src/cli/agentic_query_cli.py agent --session-id my_session
+```
+
+#### 2. Dictionary Generation (Agentic)
+AI-assisted data dictionary generation:
+```bash
+python src/cli/agentic_generate_yaml_cli.py agent
+```
+
+#### 3. Classic CLI Interfaces
+Traditional command-line interfaces:
+```bash
+# Natural language querying
+python src/cli/natural_query_cli.py
+
+# Data dictionary generation
+python src/cli/generate_yaml_cli.py
+```
+
+#### 4. Web Interface
+Launch the Streamlit web application:
+```bash
+streamlit run src/ui/main_ui.py
+```
+
+### Key Dependencies
+
+- **openai-agents**: OpenAI Agent SDK for conversational AI
+- **snowflake-connector-python**: Snowflake database connectivity
+- **openai**: OpenAI API client for LLM integration
+- **streamlit**: Web interface framework
+- **pyyaml**: YAML processing for data dictionaries
+- **pandas**: Data manipulation and analysis
+- **protobuf-to-pydantic**: Schema validation and conversion
+
