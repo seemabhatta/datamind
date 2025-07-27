@@ -172,10 +172,16 @@ def upload_to_stage_impl(agent_context, stage_name: str, filename: str) -> str:
     if not hasattr(agent_context, 'dictionary_content') or not agent_context.dictionary_content:
         return "❌ No dictionary content available. Please generate a dictionary first."
     
+    if not agent_context.current_database or not agent_context.current_schema:
+        return "❌ Database and schema must be selected first."
+    
+    # Qualify the stage name with database and schema
+    qualified_stage_name = f"@{agent_context.current_database}.{agent_context.current_schema}.{stage_name}"
+    
     try:
         result = save_dictionary_to_stage(
             agent_context.connection_id,
-            stage_name,
+            qualified_stage_name,
             filename,
             agent_context.dictionary_content
         )
