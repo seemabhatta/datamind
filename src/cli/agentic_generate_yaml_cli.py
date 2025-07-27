@@ -10,7 +10,10 @@ import yaml
 import os
 import sys
 from typing import Optional, Dict, Any, List
-from agents import Agent, Runner, function_tool, SQLiteSession
+from agents import Agent, Runner, function_tool
+from agents.memory.session import SQLiteSession
+
+
 from dataclasses import dataclass
 
 # Add the project root to the path for imports
