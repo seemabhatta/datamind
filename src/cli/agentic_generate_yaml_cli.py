@@ -10,14 +10,15 @@ import yaml
 import os
 import sys
 from typing import Optional, Dict, Any, List
-from agents import Agent, Runner, function_tool
-from agents.memory.session import SQLiteSession
-
-
 from dataclasses import dataclass
 
-# Add the project root to the path for imports
+# Add the project root and openai-agents-python/src to the path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../openai-agents-python/src')))
+
+# Import agents after setting up the path
+from agents import Agent, Runner, function_tool
+from agents.memory.session import SQLiteSession
 
 # Import our function tools
 from src.cli.tools import (
