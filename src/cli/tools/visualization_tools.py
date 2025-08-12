@@ -288,13 +288,17 @@ def _execute_llm_chart_code(df: pd.DataFrame, chart_code: str, explanation: str)
         
         print("DEBUG VIZ: Libraries imported successfully")
         
-        # Create safe execution environment
+        # Create safe execution environment with show disabled
+        def disabled_show(*args, **kwargs):
+            pass
+        
         safe_globals = {
             'df': df,
             'px': px,
             'go': go,
             'np': np,
-            'pd': pd
+            'pd': pd,
+            'show': disabled_show  # Disable automatic showing
         }
         
         print("DEBUG VIZ: Safe execution environment created")
